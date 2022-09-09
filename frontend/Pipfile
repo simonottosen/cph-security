@@ -1,0 +1,42 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+ipdb = "*"
+pre-commit = "*"
+flake8 = "*"
+black = "*"
+rope = "*"
+mypy = "*"
+
+[packages]
+pyhumps = ">=1.3.*"
+fastapi = ">=0.42.*"
+uvicorn = ">=0.10.*"
+pytest = ">=5.2.*"
+fastapi-sqlalchemy = "*"
+pydantic = "*"
+psycopg2-binary = "*"
+requests = "*"
+datetime = "*"
+scikit-learn = "*"
+pandas = "*"
+numpy = "*"
+matplotlib = "*"
+streamlit = "*"
+#bokeh = "~=2.4.3"
+altair = "*"
+seaborn = "*"
+lightgbm = "*"
+sklearn = "*"
+statsmodels = "*"
+scipy = "*"
+
+
+[requires]
+python_version = "3.8"
+
+[pipenv]
+allow_prereleases = true

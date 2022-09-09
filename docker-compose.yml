@@ -1,0 +1,88 @@
+version: "3.3"
+services:
+
+  cph_postgres_db:
+    image: postgres:latest
+    container_name: "cph_postgres_db"
+    environment: 
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+    ports:
+      - '${POSTGRES_PORT}:${POSTGRES_PORT}'
+    volumes:
+      - ./cph/db:/var/lib/postgresql/data
+      - ./cph/init.sql:/docker-entrypoint-initdb.d/create_tables.sql
+      - ./cph:/frontend/project
+    restart: unless-stopped
+
+  cph_postgrest:
+    image: postgrest/postgrest:latest
+    container_name: "cph_postgrest"
+    depends_on:
+      - cph_postgres_db
+    restart: unless-stopped
+    environment: 
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      PGRST_DB_URI: ${PGRST_DB_URI}
+      PGRST_DB_SCHEMAS: public
+      PGRST_OPENAPI_SERVER_PROXY_URI: https://cphapi.simonottosen.dk
+      PGRST_DB_ANON_ROLE: web_anon
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cphapi.rule=Host(`cphapi.simonottosen.dk`)"
+      - "traefik.http.routers.cphapi.entrypoints=websecure"
+      - "traefik.http.routers.cphapi.tls.certresolver=mytlschallenge"
+      - "traefik.http.services.cphapi.loadbalancer.server.port=3000"
+
+  swagger-ui:
+    container_name: cph_swagger-ui
+    image: swaggerapi/swagger-ui:latest
+    depends_on:
+      - cph_postgres_db
+    environment:
+      - API_URL=https://cphapi.simonottosen.dk/
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.swagger.rule=Host(`swagger.simonottosen.dk`)"
+      - "traefik.http.routers.swagger.entrypoints=websecure"
+      - "traefik.http.routers.swagger.tls.certresolver=mytlschallenge"
+      - "traefik.http.services.swagger.loadbalancer.server.port=8080"
+
+  cph_fetchtime:
+    build: ./backend/
+    container_name: "cph_fetchtime"
+    volumes:
+      - ./backend:/code
+    depends_on:
+      - cph_postgres_db
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+    restart: unless-stopped
+    
+  cph_frontend:
+    build: ./frontend
+    container_name: "cph_frontend"
+    volumes:
+      - .:/frontend/project
+    depends_on:
+      - cph_postgres_db
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cph.rule=Host(`cph.simonottosen.dk`)"
+      - "traefik.http.routers.cph.entrypoints=websecure"
+      - "traefik.http.routers.cph.tls.certresolver=mytlschallenge"
+      - "traefik.http.services.cph.loadbalancer.server.port=8501"

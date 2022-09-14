@@ -12,4 +12,6 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Build backend image
-      run: docker build ./backend/ --file Dockerfile --tag fetchtime:$(date +%s)
+      run: |
+        cd backend
+        docker build . --file Dockerfile --tag fetchtime:$(date +%s)

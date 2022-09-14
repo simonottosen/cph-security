@@ -9,11 +9,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
     ports:
-      - '${POSTGRES_PORT}:${POSTGRES_PORT}'
+      - '5432:5432'
     volumes:
-      - ./cph/db:/var/lib/postgresql/data
-      - ./cph/init.sql:/docker-entrypoint-initdb.d/create_tables.sql
-      - ./cph:/frontend/project
+      - ./database/db:/var/lib/postgresql/data
+      - ./database/create_tables.sql:/docker-entrypoint-initdb.d/create_tables.sql
     restart: unless-stopped
 
   cph_postgrest:
@@ -22,6 +21,8 @@ services:
     depends_on:
       - cph_postgres_db
     restart: unless-stopped
+    ports:
+      - "3000:3000"
     environment: 
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
@@ -29,35 +30,23 @@ services:
       POSTGRES_PORT: ${POSTGRES_PORT}
       PGRST_DB_URI: ${PGRST_DB_URI}
       PGRST_DB_SCHEMAS: public
-      PGRST_OPENAPI_SERVER_PROXY_URI: https://cphapi.simonottosen.dk
       PGRST_DB_ANON_ROLE: web_anon
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.cphapi.rule=Host(`cphapi.simonottosen.dk`)"
-      - "traefik.http.routers.cphapi.entrypoints=websecure"
-      - "traefik.http.routers.cphapi.tls.certresolver=mytlschallenge"
-      - "traefik.http.services.cphapi.loadbalancer.server.port=3000"
 
   swagger-ui:
-    container_name: cph_swagger-ui
+    container_name: "cph_swagger-ui"
     image: swaggerapi/swagger-ui:latest
     depends_on:
       - cph_postgres_db
+    ports:
+      - "8080:8080"
     environment:
-      - API_URL=https://cphapi.simonottosen.dk/
+      - API_URL=http://cph_postgrest:3000
     restart: unless-stopped
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.swagger.rule=Host(`swagger.simonottosen.dk`)"
-      - "traefik.http.routers.swagger.entrypoints=websecure"
-      - "traefik.http.routers.swagger.tls.certresolver=mytlschallenge"
-      - "traefik.http.services.swagger.loadbalancer.server.port=8080"
 
   cph_fetchtime:
     build: ./backend/
     container_name: "cph_fetchtime"
-    volumes:
-      - ./backend:/code
+    user: user
     depends_on:
       - cph_postgres_db
     environment:
@@ -65,13 +54,30 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_HOST: ${POSTGRES_HOST}
     restart: unless-stopped
-    
+    labels:
+      ofelia.enabled: "true"
+      ofelia.job-exec.app.schedule: "@every 10s"
+      ofelia.job-exec.app.command: "fetch"
+
+  ofelia:
+    container_name: "cph_fetchtime_scheduler"
+    image: mcuadros/ofelia:latest
+    restart: always
+    depends_on:
+      - cph_fetchtime
+    command: daemon --docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
   cph_frontend:
     build: ./frontend
     container_name: "cph_frontend"
     volumes:
       - .:/frontend/project
+    ports:
+      - "8501:8501"
     depends_on:
       - cph_postgres_db
     environment:
@@ -80,9 +86,3 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PORT: ${POSTGRES_PORT}
     restart: unless-stopped
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.cph.rule=Host(`cph.simonottosen.dk`)"
-      - "traefik.http.routers.cph.entrypoints=websecure"
-      - "traefik.http.routers.cph.tls.certresolver=mytlschallenge"
-      - "traefik.http.services.cph.loadbalancer.server.port=8501"

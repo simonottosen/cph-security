@@ -38,7 +38,7 @@ jobs:
         with:
           context: ./backend/
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: :latest
           labels: ${{ steps.meta.outputs.labels }}
           
   build-frontend:
@@ -64,10 +64,11 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.FRONTEND_NAME }}
 
-      - name: Build and push Docker image
+      - name: Push image
         uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
         with:
           context: ./frontend/
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: 
+            ${{ env.FRONTEND_NAME }}:latest
           labels: ${{ steps.meta.outputs.labels }}

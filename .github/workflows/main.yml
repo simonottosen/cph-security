@@ -38,7 +38,7 @@ jobs:
         with:
           context: ./backend/
           push: true
-          tags: :latest
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           
   build-frontend:
@@ -69,6 +69,5 @@ jobs:
         with:
           context: ./frontend/
           push: true
-          tags: 
-            ${{ env.FRONTEND_NAME }}:latest
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

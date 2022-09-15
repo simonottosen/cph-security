@@ -4,3 +4,8 @@ create table if not exists waitingtime (
   timestamp timestamp with time zone default timezone('cet'::text, now()) not null,
   airport text
 );
+
+
+create role web_anon nologin;
+grant usage on schema public to web_anon;
+grant select on public.waitingtime to web_anon;

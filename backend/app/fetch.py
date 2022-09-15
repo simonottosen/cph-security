@@ -3,7 +3,10 @@ import requests
 import json
 from datetime import datetime
 import os
-
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import firestore
+import urllib.request
 
 def main():
     POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD")
@@ -11,7 +14,9 @@ def main():
     POSTGRES_USER = os.environ.get("POSTGRES_USER")
     POSTGRES_PORT = os.environ.get("POSTGRES_PORT")
     POSTGRES_HOST = os.environ.get("POSTGRES_HOST")
-    
+    CPHAPI_HOST = os.environ.get("POSTGRES_HOST")
+    GOOGLE_APPLICATION_CREDENTIALS = '/home/user/app/keyfile.json'
+
     response = requests.get('https://cph-flightinfo-prod.azurewebsites.net//api/v1/waiting/get?type=ventetid')
     waitingtime = json.loads(response.text)
     queue = (waitingtime["t2WaitingTime"])
@@ -19,6 +24,10 @@ def main():
     timestamp = (timestamp.replace("T", " ")) 
     airport = "CPH"
     print(queue, timestamp, airport)
+
+    cred = credentials.Certificate(GOOGLE_APPLICATION_CREDENTIALS)
+    firebase_admin.initialize_app(cred)
+    db = firestore.client()
 
     try:
         connection = psycopg2.connect(user=POSTGRES_USER,
@@ -36,6 +45,18 @@ def main():
         print(count, "Record inserted successfully into waiting time table")
         print("PostgreSQL connection is closed")
 
+        apiurl=(str(CPHAPI_HOST)+str("/waitingtime?&order=id.desc&limit=1"))
+        data = urllib.request.urlopen(apiurl).read()
+        output = json.loads(data)
+        aDict = output[0]
+        print(aDict)
+        data = {
+        u'id': str(aDict['id']),
+        u'queue': str(aDict['queue']),
+        u'timestamp': str(aDict['timestamp']),
+        u'airport': str(aDict['airport'])
+        }
+        db.collection(u'waitingtime').document(str(aDict['id'])).set(data)
 
     except (Exception, psycopg2.Error) as error:
         print("Failed to insert record into CPH Waiting Time table", error)
@@ -45,5 +66,4 @@ def main():
         if connection:
             cursor.close()
             connection.close()
-
 

@@ -55,11 +55,17 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PORT: ${POSTGRES_PORT}
       POSTGRES_HOST: ${POSTGRES_HOST}
+      CPHAPI_HOST: ${CPHAPI_HOST}
+      GOOGLE_APPLICATION_CREDENTIALS: /home/user/app/keyfile.json
     restart: unless-stopped
+    volumes:
+      - ${GCP_KEY_PATH}:/home/user/app/keyfile.json:ro
     labels:
       ofelia.enabled: "true"
       ofelia.job-exec.app.schedule: "@every 10s"
       ofelia.job-exec.app.command: "fetch"
+
+
 
   ofelia:
     container_name: "cph_fetchtime_scheduler"

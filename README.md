@@ -4,6 +4,8 @@ This tool is designed to provide estimates of the security queue in the CPH airp
 
 ## To-Do: Fix the URL used in the frontend.
 
+Once the system is running you can access the frontend on [http://localhost:8501](http://localhost:8501)
+
 # Server configuration
 
 The below guide will set up the server on your local environment with minimal configuration.
@@ -76,4 +78,10 @@ http://localhost:3000/waitingtime?select=queue&order=id.desc&limit=1
 PostgREST uses the [OpenAPI](https://openapis.org/) standard to generate up-to-date documentation for APIs. This is being consumed by Swagger. It is available on localhost:8080 after you have run the project. 
 
 [Swagger UI](https://swagger.io/tools/swagger-ui/) allows us to visualize and interact with the API’s resources without having any of the implementation logic in place. It’s automatically generated from the OpenAPI Specification, with the visual documentation making it easy for back end implementation and client side consumption.
+
+# Front-end usage
+
+The frontend system will be running on localhost:8501. The system is running on [Streamlit](https://github.com/streamlit/streamlit). 
+The system will show the latest security waiting time from your database and will also enable you to utilize a simple machine learning model to calculate the future waiting time. The model is being trained every time you request a new estimate. 
+
 

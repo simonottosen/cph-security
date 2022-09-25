@@ -86,9 +86,7 @@ services:
       - "8501:8501"
     depends_on:
       - cph_postgres_db
+      - cph_postgrest
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PORT: ${POSTGRES_PORT}
+      CPHAPI_HOST: ${CPHAPI_HOST}
     restart: unless-stopped

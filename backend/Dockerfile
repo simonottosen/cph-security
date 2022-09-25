@@ -9,10 +9,8 @@ RUN pip install pipenv
 COPY Pipfile /home/user/app
 RUN pipenv lock
 RUN pipenv install --system --dev
-
 RUN cd /home/user/app && \
     pip install --no-cache-dir .
-
 RUN chown -R "1000:1000" /home/user
 USER user
 WORKDIR /home/user/app

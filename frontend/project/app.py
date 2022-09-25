@@ -14,10 +14,16 @@ import calendar
 import datetime
 from lightgbm import LGBMRegressor
 import time as t
+import os
+
+
+CPHAPI_HOST = os.environ.get("CPHAPI_HOST")
+
 
 @st.experimental_memo
 def load_data():
-    data = urllib.request.urlopen("https://cphapi.simonottosen.dk/waitingtime?select=id,queue,timestamp").read()
+    fulldataurl=(str(CPHAPI_HOST)+str("/waitingtime?select=id,queue,timestamp"))
+    data = urllib.request.urlopen(fulldataurl).read()
     output = json.loads(data)
     dataframe = pd.DataFrame(output)
     StartTime = dataframe["timestamp"]
@@ -33,7 +39,8 @@ def load_data():
 
 
 def load_latest():
-    data = urllib.request.urlopen("https://cphapi.simonottosen.dk/waitingtime?select=id,queue,timestamp&order=id.desc&limit=2").read()
+    latesturl=(str(CPHAPI_HOST)+str("/waitingtime?select=id,queue,timestamp&order=id.desc&limit=2"))
+    data = urllib.request.urlopen(latesturl).read()
     output = json.loads(data)
     dataframe = pd.DataFrame(output)
     delta = dataframe["queue"][0] - dataframe["queue"][1]
@@ -56,7 +63,8 @@ def load_latest():
 
 
 def load_last_two_hours():
-    data = urllib.request.urlopen("https://cphapi.simonottosen.dk/waitingtime?select=queue&order=id.desc&limit=24").read()
+    last_two_hours_url=(str(CPHAPI_HOST)+str("/waitingtime?select=queue&order=id.desc&limit=24"))
+    data = urllib.request.urlopen(last_two_hours_url).read()
     output = json.loads(data)
     dataframe = pd.DataFrame(output)
     two_hours_avg = dataframe['queue'].to_list()
@@ -88,7 +96,8 @@ def new_model(test):
     test['day'] = test.index.day
     test['month'] = test.index.month
     test['weekday'] = test.index.weekday
-    data = urllib.request.urlopen("https://cphapi.simonottosen.dk/waitingtime?select=id,queue,timestamp").read()
+    newmodeldata_url=(str(CPHAPI_HOST)+str("/waitingtime?select=id,queue,timestamp"))
+    data = urllib.request.urlopen(newmodeldata_url).read()
     output = json.loads(data)
     dataframe = pd.DataFrame(output)
     StartTime = dataframe["timestamp"]

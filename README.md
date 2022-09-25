@@ -2,6 +2,8 @@
 
 This tool is designed to provide estimates of the security queue in the CPH airport at a user-defined point in time in the future. The tool uses Machine Learning based on historical data to estimate the queue.
 
+Once the system is running you can access the frontend on [http://localhost:8501](http://localhost:8501)
+
 # Server configuration
 
 The below guide will set up the server on your local environment with minimal configuration.

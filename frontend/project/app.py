@@ -1,5 +1,5 @@
 """
-CPH Security Queue
+Airtport Security Queue
 """
 import matplotlib.pyplot as plt
 import requests
@@ -17,25 +17,27 @@ import time as t
 
 @st.experimental_memo
 def load_data():
-    data = urllib.request.urlopen("https://cphapi.simonottosen.dk/waitingtime?select=id,t2waitingtime,deliveryid").read()
+    data = urllib.request.urlopen("https://cphapi.simonottosen.dk/waitingtime?select=id,queue,timestamp").read()
     output = json.loads(data)
     dataframe = pd.DataFrame(output)
-    StartTime = dataframe["deliveryid"]
+    StartTime = dataframe["timestamp"]
     StartTime = pd.to_datetime(StartTime)
     StartTime = StartTime.apply(lambda t: t.replace(tzinfo=None))
     StartTime = StartTime + pd.DateOffset(hours=2)
     dataframe["Date and time"] = StartTime
-    dataframe["Queue"] = dataframe["t2waitingtime"]
+    dataframe["Queue"] = dataframe["queue"]
     dataframe["Time"] = StartTime.dt.time
     dataframe["Date"] = StartTime.dt.date
     return dataframe
 
+
+
 def load_latest():
-    data = urllib.request.urlopen("https://cphapi.simonottosen.dk/waitingtime?select=id,t2waitingtime,deliveryid&order=id.desc&limit=2").read()
+    data = urllib.request.urlopen("https://cphapi.simonottosen.dk/waitingtime?select=id,queue,timestamp&order=id.desc&limit=2").read()
     output = json.loads(data)
     dataframe = pd.DataFrame(output)
-    delta = dataframe["t2waitingtime"][0] - dataframe["t2waitingtime"][1]
-    latest = dataframe["t2waitingtime"][0]
+    delta = dataframe["queue"][0] - dataframe["queue"][1]
+    latest = dataframe["queue"][0]
     delta = np.int16(delta).item()
     deltapure = np.int16(delta).item()
     latest = np.int16(latest).item()
@@ -49,15 +51,15 @@ def load_latest():
         delta = (str(delta) + M)
     else:
         delta = (str(delta) + M + S)
-    latest_update = dataframe["deliveryid"]
+    latest_update = dataframe["timestamp"]
     return latest, delta, deltapure, latest_update
 
 
 def load_last_two_hours():
-    data = urllib.request.urlopen("https://cphapi.simonottosen.dk/waitingtime?select=t2waitingtime&order=id.desc&limit=24").read()
+    data = urllib.request.urlopen("https://cphapi.simonottosen.dk/waitingtime?select=queue&order=id.desc&limit=24").read()
     output = json.loads(data)
     dataframe = pd.DataFrame(output)
-    two_hours_avg = dataframe['t2waitingtime'].to_list()
+    two_hours_avg = dataframe['queue'].to_list()
     def Average(l): 
         avg = sum(l) / len(l) 
         return avg
@@ -77,32 +79,32 @@ def findDay(date):
     return (calendar.day_name[born])
 
 def new_model(test):
-    modeldatetime = test["deliveryid"]
+    modeldatetime = test["timestamp"]
     modeldatetime = pd.to_datetime(modeldatetime)
-    test["deliveryid"] = modeldatetime
-    test = test.set_index(test.deliveryid)
-    test.drop('deliveryid', axis=1, inplace=True)
+    test["timestamp"] = modeldatetime
+    test = test.set_index(test.timestamp)
+    test.drop('timestamp', axis=1, inplace=True)
     test['hour'] = test.index.hour
     test['day'] = test.index.day
     test['month'] = test.index.month
     test['weekday'] = test.index.weekday
-    data = urllib.request.urlopen("https://cphapi.simonottosen.dk/waitingtime?select=id,t2waitingtime,deliveryid").read()
+    data = urllib.request.urlopen("https://cphapi.simonottosen.dk/waitingtime?select=id,queue,timestamp").read()
     output = json.loads(data)
     dataframe = pd.DataFrame(output)
-    StartTime = dataframe["deliveryid"]
+    StartTime = dataframe["timestamp"]
     StartTime = pd.to_datetime(StartTime)
     StartTime = StartTime.apply(lambda t: t.replace(tzinfo=None))
     StartTime = StartTime + pd.DateOffset(hours=2)
-    dataframe["deliveryid"] = StartTime
-    df = dataframe.set_index(dataframe.deliveryid)
-    df.drop('deliveryid', axis=1, inplace=True)
+    dataframe["timestamp"] = StartTime
+    df = dataframe.set_index(dataframe.timestamp)
+    df.drop('timestamp', axis=1, inplace=True)
     df['hour'] = df.index.hour
     df['day'] = df.index.day
     df['month'] = df.index.month
     df['weekday'] = df.index.weekday
     df.drop(['id'], axis=1, inplace=True)
-    X = df.drop('t2waitingtime', axis=1)
-    y = df['t2waitingtime']
+    X = df.drop('queue', axis=1)
+    y = df['queue']
     X_train = X.iloc[:]
     y_train = y.iloc[:]    
     model = LGBMRegressor(random_state=42)
@@ -148,7 +150,7 @@ latest_update = load_latest()
 average = load_last_two_hours()
 st.title("CPH Security Queue ✈️ 👮🏼 ")
 #in2hours = datetime.datetime.now() + timedelta(hours=2)
-#in2hours = pd.DataFrame({'deliveryid': [in2hours]}) 
+#in2hours = pd.DataFrame({'timestamp': [in2hours]}) 
 M = " minute"
 S = "s"
 
@@ -167,7 +169,7 @@ with st.form("Input"):
     time = st.time_input('At what time would you expect to arrive at the airport?', help="Usually you should arrive approx. 2 hours before your flight if bringing luggage and 1 hour before if you are only bringing carry-on")
     datetime_queue_input_text = ('You will be flying out at ' + str(time.strftime("%H:%M")) + ' on a ' + str(findDay(date)))
     datetime_queue_input = (str(date) + ' ' + str(time))
-    test = pd.DataFrame({'deliveryid': [datetime_queue_input]}) 
+    test = pd.DataFrame({'timestamp': [datetime_queue_input]}) 
     st.write('Calculation might take a few seconds')
     btnResult = st.form_submit_button('Calculate')
     if btnResult:

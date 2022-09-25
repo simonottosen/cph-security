@@ -2,6 +2,8 @@
 
 This tool is designed to provide estimates of the security queue in the CPH airport at a user-defined point in time in the future. The tool uses Machine Learning based on historical data to estimate the queue.
 
+## To-Do: Fix the URL used in the frontend.
+
 # Server configuration
 
 The below guide will set up the server on your local environment with minimal configuration.

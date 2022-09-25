@@ -62,7 +62,7 @@ services:
       - ${GCP_KEY_PATH}:/home/user/app/keyfile.json:ro
     labels:
       ofelia.enabled: "true"
-      ofelia.job-exec.app.schedule: "@every 10s"
+      ofelia.job-exec.app.schedule: "@every 1m"
       ofelia.job-exec.app.command: "fetch"
 
 

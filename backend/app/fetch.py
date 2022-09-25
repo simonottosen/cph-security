@@ -14,7 +14,7 @@ def main():
     POSTGRES_USER = os.environ.get("POSTGRES_USER")
     POSTGRES_PORT = os.environ.get("POSTGRES_PORT")
     POSTGRES_HOST = os.environ.get("POSTGRES_HOST")
-    CPHAPI_HOST = os.environ.get("POSTGRES_HOST")
+    CPHAPI_HOST = os.environ.get("CPHAPI_HOST")
     GOOGLE_APPLICATION_CREDENTIALS = '/home/user/app/keyfile.json'
 
     response = requests.get('https://cph-flightinfo-prod.azurewebsites.net//api/v1/waiting/get?type=ventetid')
@@ -45,6 +45,7 @@ def main():
         print(count, "Record inserted successfully into waiting time table")
         print("PostgreSQL connection is closed")
 
+        # Delete the below code to remove support for Google Firebase
         apiurl=(str(CPHAPI_HOST)+str("/waitingtime?&order=id.desc&limit=1"))
         data = urllib.request.urlopen(apiurl).read()
         output = json.loads(data)
@@ -56,7 +57,7 @@ def main():
         u'timestamp': str(aDict['timestamp']),
         u'airport': str(aDict['airport'])
         }
-        db.collection(u'waitingtime').document(str(aDict['id'])).set(data)
+        db.collection(u'waitingtimetest').document(str(aDict['id'])).set(data)
 
     except (Exception, psycopg2.Error) as error:
         print("Failed to insert record into CPH Waiting Time table", error)

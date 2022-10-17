@@ -15,6 +15,7 @@ def main():
     POSTGRES_PORT = os.environ.get("POSTGRES_PORT")
     POSTGRES_HOST = os.environ.get("POSTGRES_HOST")
     CPHAPI_HOST = os.environ.get("CPHAPI_HOST")
+    HEALTHCHECK = os.environ.get("HEALTHCHECK")
     GOOGLE_APPLICATION_CREDENTIALS = '/home/user/app/keyfile.json'
 
     response = requests.get('https://cph-flightinfo-prod.azurewebsites.net//api/v1/waiting/get?type=ventetid')
@@ -58,7 +59,11 @@ def main():
         u'airport': str(aDict['airport'])
         }
         db.collection(u'waitingtimetest').document(str(aDict['id'])).set(data)
-
+        if HEALTHCHECK == "NULL":
+            print("Skipping. Healthcheck not configured")
+        else:
+            healthcheckurl=(str("https://hc-ping.com/")+str(HEALTHCHECK))
+            requests.get(healthcheckurl, timeout=10)
     except (Exception, psycopg2.Error) as error:
         print("Failed to insert record into CPH Waiting Time table", error)
 

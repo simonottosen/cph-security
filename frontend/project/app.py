@@ -1,13 +1,15 @@
 """
 Airtport Security Queue
 """
+import streamlit as st
+st.set_page_config(page_icon="👮🏼", page_title="CPH Security Queue")
+
 import matplotlib.pyplot as plt
 import requests
 import json
 import pandas as pd
 from datetime import datetime, timezone, timedelta
 import numpy as np
-import streamlit as st
 import urllib.request
 import datetime
 import calendar
@@ -20,7 +22,7 @@ import os
 CPHAPI_HOST = os.environ.get("CPHAPI_HOST")
 
 
-@st.experimental_memo
+@st.cache_data
 def load_data():
     fulldataurl=(str(CPHAPI_HOST)+str("/waitingtime?select=id,queue,timestamp"))
     data = urllib.request.urlopen(fulldataurl).read()
@@ -122,7 +124,6 @@ def new_model(test):
     return round(predict[0])
 
 
-st.set_page_config(page_icon="👮🏼", page_title="CPH Security Queue")
 
 
 

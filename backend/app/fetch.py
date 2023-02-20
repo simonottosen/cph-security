@@ -67,7 +67,7 @@ def main():
             healthcheckurl=(str("https://hc-ping.com/")+str(HEALTHCHECK))
             requests.get(healthcheckurl, timeout=10)
     except (Exception, psycopg2.Error) as error:
-        print("Failed to insert record into CPH Waiting Time table", error)
+        print("Failed to synchronize data with Firebase due to ", error)
 
     finally:
         # closing database connection.

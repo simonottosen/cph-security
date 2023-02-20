@@ -47,6 +47,7 @@ def main():
         print("PostgreSQL connection is closed")
 
         # Delete the below code to remove support for Google Firebase
+        print("Attempting to get data from public URL")
         apiurl=(str(CPHAPI_HOST)+str("/waitingtime?&order=id.desc&limit=1"))
         data = urllib.request.urlopen(apiurl).read()
         output = json.loads(data)
@@ -62,6 +63,7 @@ def main():
         if HEALTHCHECK == "NULL":
             print("Skipping. Healthcheck not configured")
         else:
+            print("Attempting to do healthcheck")
             healthcheckurl=(str("https://hc-ping.com/")+str(HEALTHCHECK))
             requests.get(healthcheckurl, timeout=10)
     except (Exception, psycopg2.Error) as error:

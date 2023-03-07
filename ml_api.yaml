@@ -14,9 +14,13 @@ spec:
     spec:
       containers:
       - name: ml-api
-        image: ghcr.io/simonottosen/cph-security_ml_api:main
+        image: ghcr.io/simonottosen/cph-security_ml_api:arm64-latest
         ports:
-        - containerPort: 80
+        - containerPort: 5000
+        env:
+        - name: CPHAPI_HOST
+          value: "https://cphapi.simonottosen.dk"
+
 ---
 kind: Service
 apiVersion: v1
@@ -30,7 +34,7 @@ spec:
   ports:
   - port: 80
     protocol: TCP
-    targetPort: 80
+    targetPort: 5000
   type: ClusterIP
 
 ---

@@ -102,7 +102,7 @@ def make_prediction():
     '''
     input_date_str = request.args.get('timestamp')
     if not input_date_str:
-        return jsonify({'error': 'Missing "timestamp" parameter.'}), 400
+        return jsonify({'error': 'Missing "timestamp" parameter. Usage: /predict?timestamp=YYYY-MM-DDTHH:MM'}), 400
     try:
         input_date = pd.to_datetime(input_date_str)
     except (ValueError, TypeError):

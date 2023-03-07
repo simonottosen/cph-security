@@ -6,10 +6,14 @@ import holidays
 from lightgbm import LGBMRegressor
 from datetime import datetime
 from flask_caching import Cache
+from flask_crontab import Crontab
 import os
 
+if os.environ.get("CPHAPI_HOST"):
+    CPHAPI_HOST = os.environ.get("CPHAPI_HOST")
+else:
+    CPHAPI_HOST = "http://cphapi.simonottosen.dk"
 
-CPHAPI_HOST = os.environ.get("CPHAPI_HOST")
 
 
 # Create Flask app instance
@@ -61,6 +65,20 @@ def get_data():
 
     return df
 
+@cache.memoize()
+def train_model():
+
+    # Fetching external dataset from API endpoint to train the model
+    df = get_data()
+
+    X = df.drop('queue', axis=1)
+    y = df['queue']
+    X_train = X.iloc[:]
+    y_train = y.iloc[:]
+    model = LGBMRegressor(random_state=42)  # Using LightGBM model to train on data
+    model.fit(X_train, y_train)
+    return model
+
 
 def predict_queue(timestamp):
     '''
@@ -81,16 +99,7 @@ def predict_queue(timestamp):
     timestamp = add_holiday_feature(timestamp)
 
     timestamp.drop('timestamp', axis=1, inplace=True)
-
-    # Fetching external dataset from API endpoint to train the model
-    df = get_data()
-
-    X = df.drop('queue', axis=1)
-    y = df['queue']
-    X_train = X.iloc[:]
-    y_train = y.iloc[:]
-    model = LGBMRegressor(random_state=42)  # Using LightGBM model to train on data
-    model.fit(X_train, y_train)
+    model = train_model()
     predict = model.predict(timestamp)
     return round(predict[0])
 
@@ -111,6 +120,17 @@ def make_prediction():
     output = {'predicted_queue_length_minutes': predict_queue(input_data)}
     return jsonify(output)
 
+model = None
+def load_model():
+    global model
+    model = train_model()
+load_model()
+
+crontab = Crontab(app)
+@crontab.job(minute=0, hour=0)
+def train():
+    print('Training model...')
+    train_model()
 
 # Main section to be executed after importing module.
 if __name__ == '__main__':

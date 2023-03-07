@@ -90,3 +90,18 @@ services:
     environment:
       CPHAPI_HOST: ${CPHAPI_HOST}
     restart: unless-stopped
+
+
+  ml_api:
+    build: ./ml_api
+    container_name: "ml_api"
+    volumes:
+      - .:/ml_api/project
+    ports:
+      - "5000:5000"
+    depends_on:
+      - cph_postgres_db
+      - cph_postgrest
+    environment:
+      CPHAPI_HOST: ${CPHAPI_HOST}
+    restart: unless-stopped

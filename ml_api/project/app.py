@@ -99,7 +99,6 @@ def predict_queue(timestamp):
     timestamp = add_holiday_feature(timestamp)
 
     timestamp.drop('timestamp', axis=1, inplace=True)
-    model = train_model()
     predict = model.predict(timestamp)
     return round(predict[0])
 

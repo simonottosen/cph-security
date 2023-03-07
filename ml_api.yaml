@@ -17,6 +17,7 @@ spec:
         image: ghcr.io/simonottosen/cph-security_ml_api:arm64-latest
         ports:
         - containerPort: 5000
+        imagePullPolicy: "Always"
         env:
         - name: CPHAPI_HOST
           value: "https://cphapi.simonottosen.dk"

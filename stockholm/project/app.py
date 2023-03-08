@@ -50,7 +50,7 @@ def main():
 
     options = FirefoxOptions()
 
-    browser = webdriver.Remote(command_executor='http://localhost:4444/wd/hub', options=options)
+    browser = webdriver.Remote(command_executor='http://selenium_firefox:4444/wd/hub', options=options)
     try:
         browser.get('https://www.swedavia.com/arlanda/security-control/')
         element = browser.find_element(by='css selector', value='#waitingtimes > div > div > div:nth-child(3) > div > div > div > div:nth-child(3) > div.terminalQueueTime')

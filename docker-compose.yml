@@ -62,8 +62,8 @@ services:
       - ${GCP_KEY_PATH}:/home/user/app/keyfile.json:ro
     labels:
       ofelia.enabled: "true"
-      ofelia.job-exec.app.schedule: "@every 1m"
-      ofelia.job-exec.app.command: "fetch"
+      ofelia.job-exec.cph.schedule: "@every 1m"
+      ofelia.job-exec.cph.command: "fetch"
 
   arn_fetchtime:
     build: ./stockholm/
@@ -71,7 +71,6 @@ services:
     user: user
     depends_on:
       - cph_postgres_db
-      - selenium_firefox
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
@@ -85,16 +84,30 @@ services:
       - ${GCP_KEY_PATH}:/home/user/app/keyfile.json:ro
     labels:
       ofelia.enabled: "true"
-      ofelia.job-exec.app.schedule: "@every 1m"
-      ofelia.job-exec.app.command: "fetch"
+      ofelia.job-exec.arn.schedule: "@every 1m"
+      ofelia.job-exec.arn.command: "fetch"
 
-  selenium_firefox:
-    container_name: "selenium_firefox"
-    image: selenium/standalone-firefox:4.8.1-20230306
-    shm_size: 2gb
-    ports:
-      - "7900:7900"
-      - "4444:4444"
+  osl_fetchtime:
+    build: ./oslo/
+    container_name: "osl_fetchtime"
+    user: user
+    depends_on:
+      - cph_postgres_db
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      CPHAPI_HOST: ${CPHAPI_HOST}
+      GOOGLE_APPLICATION_CREDENTIALS: /home/user/app/keyfile.json
+    restart: unless-stopped
+    volumes:
+      - ${GCP_KEY_PATH}:/home/user/app/keyfile.json:ro
+    labels:
+      ofelia.enabled: "true"
+      ofelia.job-exec.osl.schedule: "@every 1m"
+      ofelia.job-exec.osl.command: "fetch"
 
 
   ofelia:

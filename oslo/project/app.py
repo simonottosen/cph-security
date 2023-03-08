@@ -18,20 +18,18 @@ def main():
     HEALTHCHECK = os.environ.get("ARN_HEALTHCHECK")
     GOOGLE_APPLICATION_CREDENTIALS = '/home/user/app/keyfile.json'
 
-    response = requests.get('https://www.swedavia.com/services/queuetimes/v2/airport/en/ARN/true')
+    response = requests.get('https://avinor.no/Api/QueueTime/OSL')
     waitingtime = json.loads(response.text)
-    for queue_time in waitingtime['QueueTimesList']:
-        if queue_time['LocationName'] == 'Terminal 5F':
-            timeinput = {queue_time["Interval"]}
+    time_minutes_rounded = waitingtime.get("TimeMinutesRounded")
 
-    if isinstance(timeinput, int):
-        queue = timeinput
+    if isinstance(time_minutes_rounded, int):
+        queue = time_minutes_rounded
     else:
         print("Waiting time not found in the JSON data.")
 
     now_utc = datetime.utcnow()
     timestamp = now_utc.strftime('%Y-%m-%dT%H:%M:%S')
-    airport = "ARN"
+    airport = "OSL"
     print(queue, timestamp, airport)
 
     cred = credentials.Certificate(GOOGLE_APPLICATION_CREDENTIALS)

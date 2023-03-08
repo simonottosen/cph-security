@@ -44,16 +44,14 @@ def main():
     POSTGRES_PORT = os.environ.get("POSTGRES_PORT")
     POSTGRES_HOST = os.environ.get("POSTGRES_HOST")
     CPHAPI_HOST = os.environ.get("CPHAPI_HOST")
-    HEALTHCHECK = os.environ.get("HEALTHCHECK")
+    HEALTHCHECK = os.environ.get("ARN_HEALTHCHECK")
     GOOGLE_APPLICATION_CREDENTIALS = '/home/user/app/keyfile.json'
-
 
 
     options = FirefoxOptions()
 
     browser = webdriver.Remote(command_executor='http://selenium_firefox:4444/wd/hub', options=options)
     browser.get('https://www.swedavia.com/arlanda/security-control/')
-
     element = browser.find_element(by='css selector', value='#waitingtimes > div > div > div:nth-child(3) > div > div > div > div:nth-child(3) > div.terminalQueueTime')
     waiting_time = element.text.strip()
     browser.quit()
@@ -62,6 +60,7 @@ def main():
         queue = select_first_char(waiting_time)
     except ValueError as e:
         print(f"Error: {e}")
+        browser.quit()
 
     airport = "ARN"
     now_utc = datetime.utcnow()

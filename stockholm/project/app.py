@@ -7,6 +7,7 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
 import urllib.request
+import re
 
 def main():
     POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD")
@@ -24,10 +25,13 @@ def main():
         if queue_time['LocationName'] == 'Terminal 5F':
             timeinput = {queue_time["Interval"]}
 
-    if isinstance(timeinput, int):
+    numbers = list(map(int,re.findall('\d+', str(timeinput))))
+    print(numbers[0])
+
+    if isinstance(numbers[0], int):
         queue = timeinput
     else:
-        print("Waiting time not found in the JSON data.")
+        print("Error: Could not get waitingtime for Arlanda.")
 
     now_utc = datetime.utcnow()
     timestamp = now_utc.strftime('%Y-%m-%dT%H:%M:%S')

@@ -15,7 +15,7 @@ def main():
     POSTGRES_PORT = os.environ.get("POSTGRES_PORT")
     POSTGRES_HOST = os.environ.get("POSTGRES_HOST")
     CPHAPI_HOST = os.environ.get("CPHAPI_HOST")
-    HEALTHCHECK = os.environ.get("ARN_HEALTHCHECK")
+    HEALTHCHECK = os.environ.get("OSL_HEALTHCHECK")
     GOOGLE_APPLICATION_CREDENTIALS = '/home/user/app/keyfile.json'
 
     response = requests.get('https://avinor.no/Api/QueueTime/OSL')

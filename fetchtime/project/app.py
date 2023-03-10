@@ -70,13 +70,12 @@ def database_write(queue, timestamp, airport):
 # This function writes data to Firebase database.
 def firebase_write(airport):
     CPHAPI_HOST = os.environ.get("CPHAPI_HOST") 
-    db = firestore.client()
     GOOGLE_APPLICATION_CREDENTIALS = '/home/user/app/keyfile.json'
     
     # authenticate the credential with Firebase
     cred = credentials.Certificate(GOOGLE_APPLICATION_CREDENTIALS)
     firebase_admin.initialize_app(cred)
-    
+    db = firestore.client()
     # create url for getting data from CPH API by appending airport code (three-letter code)
     apiurl=(str(CPHAPI_HOST)+str("/waitingtime?&order=id.desc&limit=1&airport=eq.")+str(airport))
     

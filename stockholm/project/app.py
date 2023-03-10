@@ -29,7 +29,7 @@ def main():
     print(numbers[0])
 
     if isinstance(numbers[0], int):
-        queue = timeinput
+        queue = numbers[0]
     else:
         print("Error: Could not get waitingtime for Arlanda.")
 

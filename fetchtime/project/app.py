@@ -69,14 +69,8 @@ def database_write(queue, timestamp, airport):
 
 # This function writes data to Firebase database.
 def firebase_write(airport):
-    
-    # get the API host URL as environment variable 
     CPHAPI_HOST = os.environ.get("CPHAPI_HOST") 
-    
-    # initialize the Firestore database client
     db = firestore.client()
-    
-    # set the path of Google application credentials to keyfile.json in app folder
     GOOGLE_APPLICATION_CREDENTIALS = '/home/user/app/keyfile.json'
     
     # authenticate the credential with Firebase
@@ -88,16 +82,9 @@ def firebase_write(airport):
     
     # read data fetched from API endpoint using urllib.request.urlopen and store it in data
     data = urllib.request.urlopen(apiurl).read()
-    
-    # parse json formatted data string and store it in output
     output = json.loads(data)
-    
-    # pick first dictionary element from jsonArray stored in output
     aDict = output[0]
-    
-    # print the first dictionary element extracted
-    print(aDict)
-    
+        
     # create a dictionary object with keys 'id', 'queue', 'timestamp' and 'airport' and their respective values
     data = {
             u'id': str(aDict['id']),
@@ -109,16 +96,11 @@ def firebase_write(airport):
     try:
         # write the document to Firestore with id being the value associated with key id in dictionary data
         db.collection(u'waitingtimetest').document(str(aDict['id'])).set(data)
-        
-        # if successful, save the status message in firebase_write_status variable
         firebase_write_status = "Firebase write completed"
     
     except Exception as e:
-        
-        # if there is an exception, add the error details in firebase_write_status variable
         firebase_write_status = f"Firebase write failed with error: {e}"
     
-    # return the status message 
     return firebase_write_status
 
 # This function retrieves the waiting time at Frankfurt airport

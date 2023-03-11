@@ -138,5 +138,128 @@ def frankfurt():
     healthcheck_perform_status = healthcheck_perform(healthcheck)
     
     # Print a completion message with the status results from the three previous function calls
-    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Healthcheck: "+str(healthcheck_perform_status))
+    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
 
+# This function retrieves the waiting time at Dusseldorf airport
+def dusseldorf():
+    # Define initial values
+    healthcheck = os.environ.get("DUS_HEALTHCHECK") 
+    airport = "DUS"
+    airport_api = "https://www.dus.com/api/sitecore/flightapi/WaitingTimes?lang=en"
+    headers = {"X-Requested-With": "XMLHttpRequest"}
+
+    # Use requests module to send a GET request to the airport API and retrieve waiting time information as JSON
+    response = requests.get(airport_api, headers=headers)
+    waitingtime = json.loads(response.text)
+    
+    # Loop through data in the waiting time JSON until you find the relevant security checkpoint waiting time
+    for item in waitingtime['data']:
+        # check if the name in the current item equals 'Sicherheitskontrolle A'
+        if item['name'] == 'Sicherheitskontrolle A':
+            numbers = item['waitingTime']
+            if isinstance(numbers, int):
+                queue = numbers   # Assign a value to queue
+            else:
+                print("Error: Information not found in the JSON data.")
+    
+    if queue is None:
+        print("Error: Value of 'queue' was not set. Message from website was ", waitingtime)
+    else:
+        # Get current UTC datetime and format as string
+        now_utc = datetime.utcnow()
+        timestamp = now_utc.strftime('%Y-%m-%dT%H:%M:%S')
+        
+        # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
+        database_write_status = database_write(queue, timestamp, airport)
+        firebase_write_status = firebase_write(airport)
+        healthcheck_perform_status = healthcheck_perform(healthcheck)
+        
+        # Print a completion message with the status results from the three previous function calls
+        print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+
+# This function retrieves the waiting time at Copenhagen airport
+def copenhagen():
+    # Define initial values
+    healthcheck = os.environ.get("CPH_HEALTHCHECK") 
+    airport = "CPH"
+    airport_api = "https://cph-flightinfo-prod.azurewebsites.net//api/v1/waiting/get?type=ventetid"
+    
+    # Use requests module to send a GET request to the airport API and retrieve waiting time information as JSON
+    response = requests.get(airport_api)
+    waitingtime = json.loads(response.text)
+    queue = (waitingtime["t2WaitingTime"])
+    timestamp = (waitingtime["deliveryId"])
+    timestamp = (timestamp.replace("T", " ")) 
+
+    # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
+    database_write_status = database_write(queue, timestamp, airport)
+    firebase_write_status = firebase_write(airport)
+    healthcheck_perform_status = healthcheck_perform(healthcheck)
+    
+    # Print a completion message with the status results from the three previous function calls
+    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+
+# This function retrieves the waiting time at Arlanda airport
+def arlanda():
+    # Define initial values
+    healthcheck = os.environ.get("ARN_HEALTHCHECK") 
+    airport = "ARN"
+    airport_api = "https://www.swedavia.com/services/queuetimes/v2/airport/en/ARN/true"
+    
+    # Use requests module to send a GET request to the airport API and retrieve waiting time information as JSON
+    response = requests.get(airport_api)
+    waitingtime = json.loads(response.text)
+    for queue_time in waitingtime['QueueTimesList']:
+        if queue_time['LocationName'] == 'Terminal 5F':
+            timeinput = {queue_time["Interval"]}
+    
+    # Loop through data in the waiting time JSON until you find the relevant security checkpoint waiting time
+    numbers = list(map(int,re.findall('\d+', str(timeinput))))
+    print(numbers[0])
+
+    if isinstance(numbers[0], int):
+        queue = numbers[0]
+    else:
+        print("Error: Could not get waitingtime for Arlanda.")
+    
+    # Get current UTC datetime and format as string
+    now_utc = datetime.utcnow()
+    timestamp = now_utc.strftime('%Y-%m-%dT%H:%M:%S')
+    
+    # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
+    database_write_status = database_write(queue, timestamp, airport)
+    firebase_write_status = firebase_write(airport)
+    healthcheck_perform_status = healthcheck_perform(healthcheck)
+    
+    # Print a completion message with the status results from the three previous function calls
+    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+
+# This function retrieves the waiting time at Oslo airport
+def oslo():
+    # Define initial values
+    healthcheck = os.environ.get("OSL_HEALTHCHECK") 
+    airport = "OSL"
+    airport_api = "https://avinor.no/Api/QueueTime/OSL"
+    
+    # Use requests module to send a GET request to the airport API and retrieve waiting time information as JSON
+    response = requests.get(airport_api)
+    waitingtime = json.loads(response.text)
+    time_minutes_rounded = waitingtime.get("TimeMinutesRounded")
+
+    # If the first element of the extracted number list is an integer, assign its value to a queue variable. Otherwise print an error message
+    if isinstance(time_minutes_rounded, int):
+        queue = time_minutes_rounded
+    else:
+        print("Waiting time not found in the JSON data.")
+    
+    # Get current UTC datetime and format as string
+    now_utc = datetime.utcnow()
+    timestamp = now_utc.strftime('%Y-%m-%dT%H:%M:%S')
+    
+    # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
+    database_write_status = database_write(queue, timestamp, airport)
+    firebase_write_status = firebase_write(airport)
+    healthcheck_perform_status = healthcheck_perform(healthcheck)
+    
+    # Print a completion message with the status results from the three previous function calls
+    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))

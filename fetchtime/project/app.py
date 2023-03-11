@@ -13,11 +13,9 @@ import re
 def healthcheck_perform(HEALTHCHECK):
     if HEALTHCHECK == "NULL":
         # If no healthcheck is provided, skip it and return a message
-        print("Skipping. Healthcheck not configured")
         healthcheck_result = "Skipping. Healthcheck not configured"
     else:
         # Otherwise attempt to do the healthcheck by sending an HTTP GET request to the healthcheckurl
-        print("Attempting to do healthcheck")
         healthcheckurl=(str("https://hc-ping.com/")+str(HEALTHCHECK))
         requests.get(healthcheckurl, timeout=10)
         # Return a message indicating the healthcheck was submitted successfully
@@ -215,7 +213,6 @@ def arlanda():
     
     # Loop through data in the waiting time JSON until you find the relevant security checkpoint waiting time
     numbers = list(map(int,re.findall('\d+', str(timeinput))))
-    print(numbers[0])
 
     if isinstance(numbers[0], int):
         queue = numbers[0]

@@ -37,7 +37,7 @@ def get_data():
     This function fetches the external dataset from API endpoint.
     '''
     hour = 60*60
-    day = 24*hour
+    day = 24*60*60
     year = (365.2425)*day
     newmodeldata_url = (str(CPHAPI_HOST) + str("/waitingtime?select=id,queue,timestamp&airport=eq.CPH"))
     data = urllib.request.urlopen(newmodeldata_url).read()
@@ -45,8 +45,8 @@ def get_data():
     dataframe = pd.DataFrame(output)
     StartTime = dataframe["timestamp"]
     StartTime = pd.to_datetime(StartTime)
-    StartTime = StartTime.apply(lambda t: t.replace(tzinfo=None))
-    StartTime = StartTime + pd.DateOffset(hours=2)
+    StartTime = pd.to_datetime(StartTime)
+    StartTime = StartTime.apply(lambda t: t.replace(tzinfo=None)) # Replace tzinfo with None
     dataframe["timestamp"] = StartTime
     timestamp_s = StartTime.map(pd.Timestamp.timestamp)
     df = dataframe.set_index(dataframe.timestamp)
@@ -55,13 +55,15 @@ def get_data():
     df['day'] = df.index.day
     df['month'] = df.index.month
     df['weekday'] = df.index.weekday
+    timestamp_s.index = df.index
     df['Hour sin'] = np.sin(timestamp_s * (2 * np.pi / hour))
     df['Hour cos'] = np.cos(timestamp_s * (2 * np.pi / hour))
     df['Day sin'] = np.sin(timestamp_s * (2 * np.pi / day))
     df['Day cos'] = np.cos(timestamp_s * (2 * np.pi / day))
     df['Year sin'] = np.sin(timestamp_s * (2 * np.pi / year))
     df['Year cos'] = np.cos(timestamp_s * (2 * np.pi / year))
-
+    list = np.cos(timestamp_s * (2 * np.pi / hour))
+    df['Year cos'] = list[0]
     # Adding Holiday features to dataframe
     df = add_holiday_feature(df)
 
@@ -74,40 +76,48 @@ df = get_data()
 dataset = df 
 
 
-
-
 val_split = int(len(dataset) * 0.7)
 data_train = dataset[:val_split]
 validation_data = dataset[val_split:]
 
 data_x = data_train[
     [
-        "hour",
-        "day",
         "month",
         "weekday",
         "Holiday",
-    ]
+        "Hour sin",
+        "Hour cos",
+        "Day sin",
+        "Day cos",
+        "Year sin",
+        "Year cos",    ]
 ].astype("float64")
 
 data_x_val = validation_data[
     [
-        "hour",
-        "day",
         "month",
         "weekday",
         "Holiday",
-    ]
+        "Hour sin",
+        "Hour cos",
+        "Day sin",
+        "Day cos",
+        "Year sin",
+        "Year cos",    ]
 ].astype("float64")
 
 # Data with train data and the unseen data from subsequent time steps.
 data_x_test = dataset[
     [
-        "hour",
-        "day",
         "month",
         "weekday",
         "Holiday",
+        "Hour sin",
+        "Hour cos",
+        "Day sin",
+        "Day cos",
+        "Year sin",
+        "Year cos",
     ]
 ].astype("float64")
 
@@ -127,16 +137,16 @@ clf = ak.TimeseriesForecaster(
     max_trials=1,
     objective="val_loss",
 )
-# # Train the TimeSeriesForecaster with train data
-# clf.fit(
-#     x=data_x,
-#     y=data_y,
-#     validation_data=(data_x_val, data_y_val),
-#     epochs=10,
-# )
-# Predict with the best model(includes original training data).
+# Train the TimeSeriesForecaster with train data
+clf.fit(
+    x=data_x,
+    y=data_y,
+    validation_data=(data_x_val, data_y_val),
+    epochs=10,
+)
+#Predict with the best model(includes original training data).
 
-#predictions = clf.predict(data_x_test)
-#print(predictions.shape)
-# # Evaluate the best model with testing data.
-#print(clf.evaluate(data_x_val, data_y_val))
+predictions = clf.predict(data_x_test)
+print(predictions.shape)
+# Evaluate the best model with testing data.
+print(clf.evaluate(data_x_val, data_y_val))

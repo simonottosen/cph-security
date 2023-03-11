@@ -187,7 +187,6 @@ def copenhagen():
     waitingtime = json.loads(response.text)
     queue = (waitingtime["t2WaitingTime"])
     timestamp = (waitingtime["deliveryId"])
-    timestamp = (timestamp.replace("T", " ")) 
 
     # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
     database_write_status = database_write(queue, timestamp, airport)

@@ -24,7 +24,7 @@ CPHAPI_HOST = os.environ.get("CPHAPI_HOST")
 
 @st.cache_data
 def load_data():
-    fulldataurl=(str(CPHAPI_HOST)+str("/waitingtime?select=id,queue,timestamp"))
+    fulldataurl=(str(CPHAPI_HOST)+str("/waitingtime?select=id,queue,timestamp&airport=eq.CPH"))
     data = urllib.request.urlopen(fulldataurl).read()
     output = json.loads(data)
     dataframe = pd.DataFrame(output)
@@ -41,7 +41,7 @@ def load_data():
 
 
 def load_latest():
-    latesturl=(str(CPHAPI_HOST)+str("/waitingtime?select=id,queue,timestamp&order=id.desc&limit=2"))
+    latesturl=(str(CPHAPI_HOST)+str("/waitingtime?select=id,queue,timestamp&order=id.desc&limit=2&airport=eq.CPH"))
     data = urllib.request.urlopen(latesturl).read()
     output = json.loads(data)
     dataframe = pd.DataFrame(output)
@@ -65,7 +65,7 @@ def load_latest():
 
 
 def load_last_two_hours():
-    last_two_hours_url=(str(CPHAPI_HOST)+str("/waitingtime?select=queue&order=id.desc&limit=24"))
+    last_two_hours_url=(str(CPHAPI_HOST)+str("/waitingtime?select=queue&order=id.desc&limit=24&airport=eq.CPH"))
     data = urllib.request.urlopen(last_two_hours_url).read()
     output = json.loads(data)
     dataframe = pd.DataFrame(output)
@@ -98,7 +98,7 @@ def new_model(test):
     test['day'] = test.index.day
     test['month'] = test.index.month
     test['weekday'] = test.index.weekday
-    newmodeldata_url=(str(CPHAPI_HOST)+str("/waitingtime?select=id,queue,timestamp"))
+    newmodeldata_url=(str(CPHAPI_HOST)+str("/waitingtime?select=id,queue,timestamp&airport=eq.CPH"))
     data = urllib.request.urlopen(newmodeldata_url).read()
     output = json.loads(data)
     dataframe = pd.DataFrame(output)

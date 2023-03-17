@@ -33,7 +33,8 @@ def database_write(queue, timestamp, airport):
     POSTGRES_HOST = os.environ.get("POSTGRES_HOST")
     
     database_write_result = "Failed to write to database. No error registered."
-    
+    connection = None
+
     try:
         # Create a connection to the database
         connection = psycopg2.connect(user=POSTGRES_USER,
@@ -53,15 +54,15 @@ def database_write(queue, timestamp, airport):
         
         database_write_result = "Database write complete"
         
-    except (Exception, psycopg2.Error) as error:
+    except Exception as e:
         # Catch exceptions if any
-        database_write_result = ("Failed to write to the database: ", error)
-        
+        database_write_result = (f"An error occurred: {e}")
+
     finally:
         # Closing the database connection
-        if connection:
-            cursor.close()
+        if connection is not None:
             connection.close()
+
             
     return database_write_result
 

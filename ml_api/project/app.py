@@ -42,7 +42,7 @@ def get_data():
     '''
     This function fetches the external dataset from API endpoint.
     '''
-    newmodeldata_url = (str(CPHAPI_HOST) + str("/waitingtime?select=id,queue,timestamp"))
+    newmodeldata_url = (str(CPHAPI_HOST) + str("/waitingtime?select=id,queue,timestamp&airport=eq.CPH"))
     data = urllib.request.urlopen(newmodeldata_url).read()
     output = json.loads(data)
     dataframe = pd.DataFrame(output)
@@ -100,6 +100,7 @@ def predict_queue(timestamp):
 
     timestamp.drop('timestamp', axis=1, inplace=True)
     predict = model.predict(timestamp)
+    predict = predict * 1.33
     return round(predict[0])
 
 
@@ -114,7 +115,7 @@ def make_prediction():
     try:
         input_date = pd.to_datetime(input_date_str)
     except (ValueError, TypeError):
-        return jsonify({'error': 'Invalid "timestamp" parameter format. Required format is YYYY-MM-DDTHH:MM:SS.'}), 400
+        return jsonify({'error': 'Invalid "timestamp" parameter format. Required format is YYYY-MM-DDTHH:MM'}), 400
     input_data = pd.DataFrame({'timestamp': [input_date]})
     output = {'predicted_queue_length_minutes': predict_queue(input_data)}
     return jsonify(output)

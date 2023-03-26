@@ -246,6 +246,8 @@ def oslo():
     # If the first element of the extracted number list is an integer, assign its value to a queue variable. Otherwise print an error message
     if isinstance(time_minutes_rounded, int):
         queue = time_minutes_rounded
+        if queue < 0:
+            queue = 0
     else:
         print("Waiting time not found in the JSON data.")
     

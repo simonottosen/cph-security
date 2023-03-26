@@ -70,7 +70,7 @@ function App() {
           .slice(0, 16)
           .replace("T", "T");
         const response = await axios.get(
-          `https://waitport.com/api/v1/predict?timestamp=${dateTimeString}`
+          `https://waitport.com/api/v1/predict?timestamp=${dateTimeString}&airport=${selectedAirport.toLowerCase()}`
         );
         setPredictedQueueLength(response.data.predicted_queue_length_minutes);
       } catch (error) {

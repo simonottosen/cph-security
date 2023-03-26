@@ -42,7 +42,7 @@ def get_data():
     '''
     This function fetches the external dataset from API endpoint.
     '''
-    newmodeldata_url = (str(CPHAPI_HOST) + str("/waitingtime?select=id,queue,timestamp&airport=eq.CPH"))
+    newmodeldata_url = (str(CPHAPI_HOST) + str("/waitingtime?select=id,queue,timestamp,airport"))
     data = urllib.request.urlopen(newmodeldata_url).read()
     output = json.loads(data)
     dataframe = pd.DataFrame(output)
@@ -57,6 +57,10 @@ def get_data():
     df['day'] = df.index.day
     df['month'] = df.index.month
     df['weekday'] = df.index.weekday
+    df_airport = pd.get_dummies(df['airport'])
+    df_test = pd.concat([df, df_airport], axis=1)
+    df = df_test
+    df = df.drop(columns=['airport'])
 
     # Adding Holiday features to dataframe
     df = add_holiday_feature(df)
@@ -86,6 +90,8 @@ def predict_queue(timestamp):
     '''
 
     # Manipulating input data to get features out of it
+    print(timestamp)
+    airport = timestamp["airport"].iloc[0]
     modeldatetime = timestamp["timestamp"]
     modeldatetime = pd.to_datetime(modeldatetime)
     timestamp["timestamp"] = modeldatetime
@@ -95,10 +101,23 @@ def predict_queue(timestamp):
     timestamp['month'] = timestamp.index.month
     timestamp['weekday'] = timestamp.index.weekday
 
+    airport_dict = {
+        "ARN": [1, 0, 0, 0, 0, 0],
+        "BER": [0, 1, 0, 0, 0, 0],
+        "CPH": [0, 0, 1, 0, 0, 0],
+        "DUS": [0, 0, 0, 1, 0, 0],
+        "FRA": [0, 0, 0, 0, 1, 0],
+        "OSL": [0, 0, 0, 0, 0, 1]
+    }
+
+    if airport in airport_dict:
+        timestamp[['ARN', 'BER', 'CPH', 'DUS', 'FRA', 'OSL']] = airport_dict[airport]
+
     # Apply add_holiday_feature to add a column indicating whether the time is a holiday or not.
     timestamp = add_holiday_feature(timestamp)
 
     timestamp.drop('timestamp', axis=1, inplace=True)
+    timestamp = timestamp.drop(columns=['airport'])
     predict = model.predict(timestamp)
     predict = predict * 1.33
     return round(predict[0])
@@ -110,13 +129,24 @@ def make_prediction():
     This route provides interface to take timestamp as parameter and invoke predict_queue method
     '''
     input_date_str = request.args.get('timestamp')
+    airport_code = request.args.get('airport')
+    airport_code = airport_code.upper()
+    valid_airports = ['ARN', 'BER', 'CPH', 'DUS', 'FRA', 'OSL']
     if not input_date_str:
-        return jsonify({'error': 'Missing "timestamp" parameter. Usage: /predict?timestamp=YYYY-MM-DDTHH:MM'}), 400
+        return jsonify({'error': 'Missing "timestamp" parameter. Usage: /predict?airport=ARN&timestamp=YYYY-MM-DDTHH:MM'}), 400
+
+    if not airport_code:
+        return jsonify({'error': 'Missing "airport" parameter. Usage: /predict?airport=ARN&timestamp=YYYY-MM-DDTHH:MM'}), 400
+
+    if airport_code not in valid_airports:
+        return jsonify({'error': f'Invalid airport code "{airport_code}". Valid airport codes are {",".join(valid_airports)}.'}), 400
+
     try:
         input_date = pd.to_datetime(input_date_str)
     except (ValueError, TypeError):
-        return jsonify({'error': 'Invalid "timestamp" parameter format. Required format is YYYY-MM-DDTHH:MM'}), 400
-    input_data = pd.DataFrame({'timestamp': [input_date]})
+        return jsonify({'error': 'Invalid "timestamp" parameter format. Required format is YYYY-MM-DDTHH:MM. Usage: /predict?airport=ARN&timestamp=YYYY-MM-DDTHH:MM'}), 400
+
+    input_data = pd.DataFrame({'timestamp': [input_date], 'airport': [airport_code]})
     output = {'predicted_queue_length_minutes': predict_queue(input_data)}
     return jsonify(output)
 

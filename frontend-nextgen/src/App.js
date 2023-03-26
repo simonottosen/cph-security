@@ -77,10 +77,10 @@ function App() {
         console.error(error);
       }
     };
-
+  
     fetchPredictedQueueLength();
-  }, [selectedDateTime]);
-
+  }, [selectedAirport, selectedDateTime]);
+  
 
   let airportName;
 

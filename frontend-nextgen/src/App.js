@@ -8,8 +8,6 @@ import DropdownButton from "react-bootstrap/DropdownButton";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./App.css";
 import 'moment/locale/da';
-import Row from "react-bootstrap/Row";
-import Col from "react-bootstrap/Col";
 
 
 
@@ -62,7 +60,7 @@ function App() {
     };
     fetchQueueAverageInformation();
   }, [selectedAirport]);
-  
+
 
   useEffect(() => {
     const fetchPredictedQueueLength = async () => {
@@ -109,38 +107,38 @@ function App() {
   const month = selectedDateTime.toLocaleString('default', { month: 'long' });
   const hour = selectedDateTime.getHours();
   const minute = selectedDateTime.getMinutes().toString().padStart(2, '0');
-  
+
   const formattedDate = `${day}${getOrdinalSuffix(day)} of ${month} at ${hour}:${minute}`;
-  
+
   function getOrdinalSuffix(day) {
     const suffixes = ['th', 'st', 'nd', 'rd'];
     const lastDigit = day % 10;
     return suffixes[(day % 100 - 10) in [11, 12, 13] ? 0 :
       (lastDigit > 3) ? 0 : lastDigit];
   }
-  
-  
+
+
 
   return (
 
     <Container fluid="sm" className="bg-light p-5 md">
       <h1 className="text-center mb-5"><b>Wait</b>port 🛫</h1>
       <div className="container">
-      <div className="row justify-content-start">
+        <div className="row justify-content-start">
           <div className="col-12">
             <p className="lead">Hey, welcome to <b><b>Wait</b>port!</b> <br></br><br></br>You can track the waiting-time in the
               security across various European airports - we're constantly adding new airports to the
               page. The data is collected in real-time while the prediction model is re-trained continiously and offers a conservative estimate of the queue at a given date and time.  <br></br><br></br>Start by selecting the airport you're interested in below! 🌏
               <br></br><br></br>
-If you also select a time and date for when you expect to be in the airport, I'll do my best to estimate the queue in the future 🔮
-              </p>
-              <br></br>
-              <hr></hr>
-              <br></br>
-      </div>
-    <div className="col-lg-4 col-sm-6">
-      
-    <DropdownButton
+              If you also select a time and date for when you expect to be in the airport, I'll do my best to estimate the queue in the future 🔮
+            </p>
+            <br></br>
+            <hr></hr>
+            <br></br>
+          </div>
+          <div className="col-lg-4 col-sm-6">
+
+            <DropdownButton
               id="airport-select"
               title={airportName}
               onSelect={handleAirportChange}>
@@ -151,72 +149,68 @@ If you also select a time and date for when you expect to be in the airport, I'l
               <Dropdown.Item eventKey="ber">🇩🇪 Berlin Brandenburg Airport</Dropdown.Item>
             </DropdownButton>
 
-    </div>
-    <div className="col-lg-8 col-md-12">
-    <br class="d-md-none" />
-    {queue !== null && (
-            <p className="lead">
-              The <b>current</b> queue at {airportName} airport is{" "}
-              <strong>{queue}</strong> minutes. <br></br><i>In the last two hours, the average queue has been <strong>{averageQueue}</strong> minutes.</i>
-            </p>
-          )}
+          </div>
+          <div className="col-lg-8 col-md-12">
+            <br class="d-md-none" />
+            {queue !== null && (
+              <p className="lead">
+                The <b>current</b> queue at {airportName} airport is{" "}
+                <strong>{queue}</strong> minutes. <br></br><i>In the last two hours, the average queue has been <strong>{averageQueue}</strong> minutes.</i>
+              </p>
+            )}
 
-    </div>
-    </div>
-
-
-    <div className="row">
-
-    <div className="col-lg-4 col-sm-6">
-    <br></br>
-
-    <DateTime
-            locale="da-dk"
-            inputProps={{ id: "datetime-picker" }}
-            dateFormat="MM/DD"
-            initialValue={selectedDateTime}
-            initialViewDate={selectedDateTime}
-            initialViewMode="time"
-            onChange={handleDateTimeChange}
-          />
-    </div>
-    <div className="col-lg-8 col-md-12">
-    <br></br>
-    
-    {predictedQueueLength !== null && (
-            <p className="lead">
-              The <b>predicted</b> queue length is{" "}
-              <strong>{predictedQueueLength}</strong> minutes at{" "}
-              {formattedDate}.
-            </p>
-          )}
-    </div>
-
-  </div>
+          </div>
+        </div>
 
 
- 
-<div class="b-example-divider"></div>
+        <div className="row">
 
-<div class="container">
-  <footer class="py-3 my-4">
-    <ul class="nav justify-content-center border-bottom pb-3 mb-3">
-      <li class="nav-item"><a href="https://simonottosen.dk/" class="nav-link px-2 text-muted">Other projects</a></li>
-      <li class="nav-item"><a href="https://waitport.com/api/v1/cph" class="nav-link px-2 text-muted">API</a></li>
-      <li class="nav-item"><a href="https://github.com/simonottosen/cph-security" class="nav-link px-2 text-muted">GitHub</a></li>
-  
-    </ul>
-    <p class="text-center text-muted">Made with ❤️ by Simon Ottosen</p>
-  </footer>
-</div>
+          <div className="col-lg-4 col-sm-6">
+            <br></br>
 
-    </div>
+            <DateTime
+              locale="da-dk"
+              inputProps={{ id: "datetime-picker" }}
+              dateFormat="MM/DD"
+              initialValue={selectedDateTime}
+              initialViewDate={selectedDateTime}
+              initialViewMode="time"
+              onChange={handleDateTimeChange}
+            />
+          </div>
+          <div className="col-lg-8 col-md-12">
+            <br></br>
 
- 
+            {predictedQueueLength !== null && (
+              <p className="lead">
+                The <b>predicted</b> queue length is{" "}
+                <strong>{predictedQueueLength}</strong> minutes at{" "}
+                {formattedDate}.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div class="b-example-divider"></div>
+
+        <div class="container">
+          <footer class="py-3 my-4">
+            <ul class="nav justify-content-center border-bottom pb-3 mb-3">
+              <li class="nav-item"><a href="https://simonottosen.dk/" class="nav-link px-2 text-muted">Other projects</a></li>
+              <li class="nav-item"><a href="https://waitport.com/api/v1/cph" class="nav-link px-2 text-muted">API</a></li>
+              <li class="nav-item"><a href="https://github.com/simonottosen/cph-security" class="nav-link px-2 text-muted">GitHub</a></li>
+            </ul>
+            <p class="text-center text-muted">Made with ❤️ by Simon Ottosen</p>
+          </footer>
+        </div>
+
+      </div>
+
+
 
 
     </Container>
-    
+
   );
 }
 

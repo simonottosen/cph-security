@@ -12,6 +12,7 @@ setup(
                 "cph-fetch=app.app:copenhagen",
                 "arn-fetch=app.app:arlanda",
                 "osl-fetch=app.app:oslo",
+                "ams-fetch=app.app:amsterdam",
                 "ber-fetch=app.app:berlin"
             ]
         }

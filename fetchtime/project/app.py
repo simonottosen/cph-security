@@ -231,6 +231,41 @@ def arlanda():
     # Print a completion message with the status results from the three previous function calls
     print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
 
+# This function retrieves the waiting time at Schipol airport
+def amsterdam():
+    # Define initial values
+    healthcheck = os.environ.get("AMS_HEALTHCHECK") 
+    airport = "AMS"
+    airport_api = "https://www.schiphol.nl/api/proxy/v3/waittimes/security-filters"
+    
+    # Use requests module to send a GET request to the airport API and retrieve waiting time information as JSON
+    response = requests.get(airport_api)
+    waitingtime = json.loads(response.text)
+    vf1_wait_time = waitingtime.get("VF1", {}).get("waitTimeInSeconds")
+
+    # If wf1_wait_time is not None, assign its value to a queue variable. Otherwise print an error message
+    if vf1_wait_time is not None:
+        queue = vf1_wait_time // 60  # Convert wait time in seconds to minutes
+        if queue < 0:
+            queue = 0
+    else:
+        print("Waiting time not found for Schipol.")
+    
+    # Get current UTC datetime and format as string
+    now_utc = datetime.utcnow()
+    timestamp = now_utc.strftime('%Y-%m-%dT%H:%M:%S')
+    
+    # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
+    database_write_status = database_write(queue, timestamp, airport)
+    firebase_write_status = firebase_write(airport)
+    healthcheck_perform_status = healthcheck_perform(healthcheck)
+    
+    # Print a completion message with the status results from the three previous function calls
+    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+
+
+
+
 # This function retrieves the waiting time at Oslo airport
 def oslo():
     # Define initial values

@@ -102,17 +102,18 @@ def predict_queue(timestamp):
     timestamp['weekday'] = timestamp.index.weekday
 
     airport_dict = {
-        "ARN": [1, 0, 0, 0, 0, 0, 0],
-        "BER": [0, 1, 0, 0, 0, 0, 0],
-        "CPH": [0, 0, 1, 0, 0, 0, 0],
-        "DUS": [0, 0, 0, 1, 0, 0, 0],
-        "FRA": [0, 0, 0, 0, 1, 0, 0],
-        "OSL": [0, 0, 0, 0, 0, 1, 0],
-        "AMS": [0, 0, 0, 0, 0, 0, 1]
+        "ARN": [1, 0, 0, 0, 0, 0, 0, 0],
+        "BER": [0, 1, 0, 0, 0, 0, 0, 0],
+        "CPH": [0, 0, 1, 0, 0, 0, 0, 0],
+        "DUS": [0, 0, 0, 1, 0, 0, 0, 0],
+        "FRA": [0, 0, 0, 0, 1, 0, 0, 0],
+        "OSL": [0, 0, 0, 0, 0, 1, 0, 0],
+        "AMS": [0, 0, 0, 0, 0, 0, 1, 0],
+        "DUB": [0, 0, 0, 0, 0, 0, 0, 1]
     }
 
     if airport in airport_dict:
-        timestamp[['ARN', 'BER', 'CPH', 'DUS', 'FRA', 'OSL', 'AMS']] = airport_dict[airport]
+        timestamp[['ARN', 'BER', 'CPH', 'DUS', 'FRA', 'OSL', 'AMS', 'DUB']] = airport_dict[airport]
 
     # Apply add_holiday_feature to add a column indicating whether the time is a holiday or not.
     timestamp = add_holiday_feature(timestamp)
@@ -132,7 +133,7 @@ def make_prediction():
     input_date_str = request.args.get('timestamp')
     airport_code = request.args.get('airport')
     airport_code = airport_code.upper()
-    valid_airports = ['ARN', 'BER', 'CPH', 'DUS', 'FRA', 'OSL', 'AMS']
+    valid_airports = ['ARN', 'BER', 'CPH', 'DUS', 'FRA', 'OSL', 'AMS', 'DUB']
     if not input_date_str:
         return jsonify({'error': 'Missing "timestamp" parameter. Usage: /predict?airport=ARN&timestamp=YYYY-MM-DDTHH:MM'}), 400
 

@@ -108,6 +108,10 @@ function App() {
     airportName = 'Amsterdam Airport';
   }
 
+  if (selectedAirport === 'dub') {
+    airportName = 'Dublin Airport';
+  }
+
   const day = selectedDateTime.getDate();
   const month = selectedDateTime.toLocaleString('default', { month: 'long' });
   const hour = selectedDateTime.getHours();
@@ -153,6 +157,7 @@ function App() {
               <Dropdown.Item eventKey="dus">🇩🇪 Düsseldorf International Airport</Dropdown.Item>
               <Dropdown.Item eventKey="ber">🇩🇪 Berlin Brandenburg Airport</Dropdown.Item>
               <Dropdown.Item eventKey="ams">🇳🇱 Amsterdam Schipol Airport</Dropdown.Item>
+              <Dropdown.Item eventKey="ams">🇮🇪 Dublin Airport</Dropdown.Item>
             </DropdownButton>
 
           </div>

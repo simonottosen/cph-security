@@ -2,7 +2,7 @@ name: Publish back- and frontend images
 
 on:
   push:
-    branches: ['main']
+    branches: [main]
 
 env:
   REGISTRY: ghcr.io
@@ -19,29 +19,40 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
 
       - name: Log in to the Container registry
-        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
+        uses: docker/login-action@v1
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: |
+            ~/.cache/docker
+          key: ${{ runner.os }}-docker-${{ env.FETCHTIME_NAME }}-${{ env.REGISTRY }}
+          restore-keys: |
+            ${{ runner.os }}-docker-${{ env.FETCHTIME_NAME }}-${{ env.REGISTRY }}-
+
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
+        uses: docker/metadata-action@v3
         with:
           images: ${{ env.REGISTRY }}/${{ env.FETCHTIME_NAME }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
+        uses: docker/build-push-action@v2
         with:
           context: ./fetchtime/
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-
+          cache-from: type=local,src=${{ runner.home }}/.cache/docker/${{ env.FETCHTIME_NAME }}
+          cache-to: type=local,dest=${{ runner.home }}/.cache/docker/${{ env.FETCHTIME_NAME }},mode=max
 
   build-frontend-nextgen:
     runs-on: ubuntu-latest
@@ -51,29 +62,40 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
 
       - name: Log in to the Container registry
-        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
+        uses: docker/login-action@v1
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: |
+            ~/.cache/docker
+          key: ${{ runner.os }}-docker-${{ env.FRONTENDNEXTGEN_NAME }}-${{ env.REGISTRY }}
+          restore-keys: |
+            ${{ runner.os }}-docker-${{ env.FRONTENDNEXTGEN_NAME }}-${{ env.REGISTRY }}-
+
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
+        uses: docker/metadata-action@v3
         with:
           images: ${{ env.REGISTRY }}/${{ env.FRONTENDNEXTGEN_NAME }}
 
-      - name: Push image
-        uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v2
         with:
           context: ./frontend-nextgen/
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-
+          cache-from: type=local,src=${{ runner.home }}/.cache/docker/${{ env.FRONTENDNEXTGEN_NAME }}
+          cache-to: type=local,dest=${{ runner.home }}/.cache/docker/${{ env.FRONTENDNEXTGEN_NAME }},mode=max
 
   build-ml-api:
     runs-on: ubuntu-latest
@@ -82,65 +104,58 @@ jobs:
       packages: write
 
     steps:
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v2.1.0
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
 
-    # Use Docker Buildx builder
-    - name: Set up Docker Buildx
-      id: buildx
-      uses: docker/setup-buildx-action@v2.4.1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          driver-options: |
+            image=moby/buildkit:master
+            network=host
 
-    - name: Checkout repository
-      uses: actions/checkout@v2
+      - name: Checkout repository
+        uses: actions/checkout@v2
 
-    - name: Log in to the Container registry
-      uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Log in to the Container registry
+        uses: docker/login-action@v1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-        
-    - name: Build and Push Docker image (linux/amd64)
-      uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
-      with:
-        context: ./ml_api/
-        push: true
-        file: ./ml_api/Dockerfile
-        platforms: linux/amd64
-        tags: |
-          ${{ env.REGISTRY }}/${{ env.ML_API_NAME }}:latest
-          ${{ env.REGISTRY }}/${{ env.ML_API_NAME }}:${{ github.sha }}
+      - name: Check Cache for Buildx
+        id: check-cache
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          outputs: type=local,dest=cache
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.ML_API_NAME }}:cache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.ML_API_NAME }}:cache,mode=max
+          platforms: linux/amd64,linux/arm64
 
-    - name: Build and Push Docker image (linux/arm64)
-      uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
-      with:
-        context: ./ml_api/
-        push: true
-        file: ./ml_api/Dockerfile
-        platforms: linux/arm64
-        builder: ${{env.DOCKER_BUILDER}}
-        tags: |
-          ${{ env.REGISTRY }}/${{ env.ML_API_NAME }}:arm64-latest
-          ${{ env.REGISTRY }}/${{ env.ML_API_NAME }}:arm64-${{ github.sha }}
+      - name: Build and Push Docker image (linux/amd64)
+        uses: docker/build-push-action@v2
+        with:
+          context: ./ml_api/
+          push: true
+          file: ./ml_api/Dockerfile
+          platforms: linux/amd64
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.ML_API_NAME }}:cache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.ML_API_NAME }}:cache,mode=max
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.ML_API_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.ML_API_NAME }}:${{ github.sha }}
 
-    - name: Log in to the Container registry
-      uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Extract metadata (tags, labels) for Docker
-      id: meta
-      uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
-      with:
-        images: ${{ env.REGISTRY }}/${{ env.ML_API_NAME }}
-
-    - name: Push image
-      uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
-      with:
-        context: ./ml_api/
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
+      - name: Build and Push Docker image (linux/arm64)
+        uses: docker/build-push-action@v2
+        with:
+          context: ./ml_api/
+          push: true
+          file: ./ml_api/Dockerfile
+          platforms: linux/arm64
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.ML_API_NAME }}:cache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.ML_API_NAME }}:cache,mode=max
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.ML_API_NAME }}:arm64-latest
+            ${{ env.REGISTRY }}/${{ env.ML_API_NAME }}:arm64-${{ github.sha }}

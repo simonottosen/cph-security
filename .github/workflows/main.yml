@@ -128,7 +128,7 @@ jobs:
         id: check-cache
         uses: docker/build-push-action@v2
         with:
-          context: .
+          context: ./ml_api/
           outputs: type=local,dest=cache
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.ML_API_NAME }}:cache
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.ML_API_NAME }}:cache,mode=max

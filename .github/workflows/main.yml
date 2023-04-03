@@ -51,6 +51,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          builder: docker-container # Set the builder to docker-container
           cache-from: type=local,src=${{ runner.home }}/.cache/docker/${{ env.FETCHTIME_NAME }}
           cache-to: type=local,dest=${{ runner.home }}/.cache/docker/${{ env.FETCHTIME_NAME }},mode=max
 
@@ -94,6 +95,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          builder: docker-container # Set the builder to docker-container
           cache-from: type=local,src=${{ runner.home }}/.cache/docker/${{ env.FRONTENDNEXTGEN_NAME }}
           cache-to: type=local,dest=${{ runner.home }}/.cache/docker/${{ env.FRONTENDNEXTGEN_NAME }},mode=max
 

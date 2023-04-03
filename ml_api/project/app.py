@@ -134,6 +134,10 @@ def make_prediction():
     airport_code = request.args.get('airport')
     airport_code = airport_code.upper()
     valid_airports = ['ARN', 'BER', 'CPH', 'DUS', 'FRA', 'OSL', 'AMS', 'DUB']
+    
+    if not input_date_str and not airport_code:
+        return jsonify({'error': 'Missing "airport" and "timestamp" parameters. Usage: /predict?airport=ARN&timestamp=YYYY-MM-DDTHH:MM'}), 400
+
     if not input_date_str:
         return jsonify({'error': 'Missing "timestamp" parameter. Usage: /predict?airport=ARN&timestamp=YYYY-MM-DDTHH:MM'}), 400
 

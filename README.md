@@ -77,9 +77,23 @@ PostgREST uses the [OpenAPI](https://openapis.org/) standard to generate up-to-d
 
 [Swagger UI](https://swagger.io/tools/swagger-ui/) allows us to visualize and interact with the API’s resources without having any of the implementation logic in place. It’s automatically generated from the OpenAPI Specification, with the visual documentation making it easy for back end implementation and client side consumption.
 
-# Front-end usage
+##  Frontend
 
-The frontend system will be running on localhost:8501. The system is running on [Streamlit](https://github.com/streamlit/streamlit). 
-The system will show the latest security waiting time from your database and will also enable you to utilize a simple machine learning model to calculate the future waiting time. The model is being trained every time you request a new estimate. 
+This code is the frontend part of the Waitport service, a web application that allows users to track waiting times at various European airports. The frontend is built using React and includes features such as selecting an airport to view current queue times and selecting a specific date and time to see predicted queue lengths.
 
+### Dependencies
+- React
+- axios
+- react-datetime
+- react-bootstrap
 
+### How to Use
+1. Clone the repository to your local machine.
+2. Install dependencies by running `npm install`.
+3. Start the development server by running `npm start`.
+4. Open the web application in your browser at `http://localhost:3000/`.
+
+#### Features
+- Select an airport from the dropdown menu to view current queue times and average queue times for the past two hours.
+- Select a specific date and time to view predicted queue lengths for the selected airport.
+- API endpoint available at `https://waitport.com/api/v1/:airport` where `:airport` is the airport code (e.g. `cph` for Copenhagen Airport). 

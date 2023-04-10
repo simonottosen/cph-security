@@ -132,7 +132,6 @@ def make_prediction():
     '''
     input_date_str = request.args.get('timestamp')
     airport_code = request.args.get('airport')
-    airport_code = airport_code.upper()
     valid_airports = ['ARN', 'BER', 'CPH', 'DUS', 'FRA', 'OSL', 'AMS', 'DUB']
     
     if not input_date_str and not airport_code:
@@ -145,13 +144,14 @@ def make_prediction():
         return jsonify({'error': 'Missing "airport" parameter. Usage: /predict?airport=ARN&timestamp=YYYY-MM-DDTHH:MM'}), 400
 
     if airport_code not in valid_airports:
+        airport_code = airport_code.upper()
         return jsonify({'error': f'Invalid airport code "{airport_code}". Valid airport codes are {",".join(valid_airports)}.'}), 400
 
     try:
         input_date = pd.to_datetime(input_date_str)
     except (ValueError, TypeError):
         return jsonify({'error': 'Invalid "timestamp" parameter format. Required format is YYYY-MM-DDTHH:MM. Usage: /predict?airport=ARN&timestamp=YYYY-MM-DDTHH:MM'}), 400
-
+    airport_code = airport_code.upper()
     input_data = pd.DataFrame({'timestamp': [input_date], 'airport': [airport_code]})
     output = {'predicted_queue_length_minutes': predict_queue(input_data)}
     return jsonify(output)

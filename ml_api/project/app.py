@@ -143,8 +143,7 @@ def make_prediction():
     if not airport_code:
         return jsonify({'error': 'Missing "airport" parameter. Usage: /predict?airport=ARN&timestamp=YYYY-MM-DDTHH:MM'}), 400
 
-    if airport_code not in valid_airports:
-        airport_code = airport_code.upper()
+    if airport_code.upper() not in valid_airports:
         return jsonify({'error': f'Invalid airport code "{airport_code}". Valid airport codes are {",".join(valid_airports)}.'}), 400
 
     try:

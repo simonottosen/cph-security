@@ -157,7 +157,7 @@ function App() {
               <Dropdown.Item eventKey="dus">🇩🇪 Düsseldorf International Airport</Dropdown.Item>
               <Dropdown.Item eventKey="ber">🇩🇪 Berlin Brandenburg Airport</Dropdown.Item>
               <Dropdown.Item eventKey="ams">🇳🇱 Amsterdam Schipol Airport</Dropdown.Item>
-              <Dropdown.Item eventKey="ams">🇮🇪 Dublin Airport</Dropdown.Item>
+              <Dropdown.Item eventKey="dub">🇮🇪 Dublin Airport</Dropdown.Item>
             </DropdownButton>
 
           </div>

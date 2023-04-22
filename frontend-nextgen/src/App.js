@@ -165,7 +165,7 @@ function App() {
             <br class="d-md-none" />
             {queue !== null && (
               <p className="lead">
-                The <b>current</b> queue at {airportName} airport is{" "}
+                The <b>current</b> queue at {airportName} is{" "}
                 <strong>{queue}</strong> minutes. <br></br><i>In the last two hours, the average queue has been <strong>{averageQueue}</strong> minutes.</i>
               </p>
             )}

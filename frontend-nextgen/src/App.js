@@ -34,7 +34,7 @@ function App() {
     const fetchQueueInformation = async () => {
       try {
         const response = await axios.get(
-          `https://waitport.com/api/v1/${selectedAirport.toLowerCase()}?limit=1&select=queue`
+          `https://waitport.com/api/v1/all?airport=eq.${selectedAirport.toUpperCase()}&limit=1&select=queue`
         );
         setQueue(response.data[0].queue);
       } catch (error) {
@@ -49,7 +49,7 @@ function App() {
     const fetchQueueAverageInformation = async () => {
       try {
         const response = await axios.get(
-          `https://waitport.com/api/v1/${selectedAirport.toLowerCase()}?select=queue`
+          `https://waitport.com/api/v1/all?airport=eq.${selectedAirport.toUpperCase()}&select=queue&limit=24`
         );
         const queueValues = response.data.map(data => data.queue);
         const averageQueue = Math.round(queueValues.reduce((total, value) => total + value, 0) / queueValues.length);

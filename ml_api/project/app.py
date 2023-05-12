@@ -42,7 +42,8 @@ def get_data():
     '''
     This function fetches the external dataset from API endpoint.
     '''
-    newmodeldata_url = (str(CPHAPI_HOST) + str("/waitingtime?select=id,queue,timestamp,airport"))
+    now = datetime.now()
+    newmodeldata_url = (str(CPHAPI_HOST) + str("?select=id,queue,timestamp,airport"))
     data = urllib.request.urlopen(newmodeldata_url).read()
     output = json.loads(data)
     dataframe = pd.DataFrame(output)
@@ -53,6 +54,7 @@ def get_data():
     dataframe["timestamp"] = StartTime
     df = dataframe.set_index(dataframe.timestamp)
     df.drop('timestamp', axis=1, inplace=True)
+    df['year'] = df.index.year
     df['hour'] = df.index.hour
     df['day'] = df.index.day
     df['month'] = df.index.month
@@ -61,7 +63,30 @@ def get_data():
     df_test = pd.concat([df, df_airport], axis=1)
     df = df_test
     df = df.drop(columns=['airport'])
+    for airport_code in ['AMS', 'ARN', 'BER', 'CPH', 'DUB', 'DUS', 'FRA', 'OSL']:
+        airport_data = df[df[airport_code] == 1]
+        
+        yesterday = now - timedelta(days=1)
+        yesterday_data = airport_data[(airport_data['year'] == yesterday.year) &
+                                      (airport_data['month'] == yesterday.month) &
+                                      (airport_data['day'] == yesterday.day)]
+        
+        yesterday_data_between_7_and_22 = yesterday_data[(yesterday_data['hour'] >= 7) & 
+                                                         (yesterday_data['hour'] <= 22)]
+        yesterday_average_queue = yesterday_data_between_7_and_22['queue'].mean()
+        
+        df.loc[df[airport_code] == 1, 'yesterday_average_queue'] = yesterday_average_queue
+        
+        now = pd.Timestamp.now().floor('H')
+        week_ago = now - pd.Timedelta(days=7)
+        mask = (df.index >= week_ago) & (df.index <= now)
+        mask &= (df.index.hour >= 7) & (df.index.hour <= 22)
+        mask &= (df[airport_code] == 1)
+        lastweek_average_queue = df[mask]['queue'].reset_index(drop=True).rolling(24).mean().iloc[-1]
+        df.loc[df[airport_code] == 1, 'lastweek_average_queue'] = lastweek_average_queue
 
+
+        
     # Adding Holiday features to dataframe
     df = add_holiday_feature(df)
 
@@ -77,17 +102,24 @@ def train_model():
 
     X = df.drop('queue', axis=1)
     y = df['queue']
-    X_train = X.iloc[:]
-    y_train = y.iloc[:]
+    X_train = X
+    y_train = y
     model = LGBMRegressor(random_state=42)  # Using LightGBM model to train on data
     model.fit(X_train, y_train)
     return model
+
 
 
 def predict_queue(timestamp):
     '''
     This function takes input timestamp and predicts the queue length based on a pre-trained LightGBM model.
     '''
+    now = datetime.now()
+    newmodeldata_url = (str(CPHAPI_HOST) + str("?select=id,queue,timestamp,airport"))
+    data = urllib.request.urlopen(newmodeldata_url).read()
+    output = json.loads(data)
+    dataframe = pd.DataFrame(output)
+    data = dataframe.set_index(dataframe.timestamp)
 
     # Manipulating input data to get features out of it
     print(timestamp)
@@ -96,6 +128,7 @@ def predict_queue(timestamp):
     modeldatetime = pd.to_datetime(modeldatetime)
     timestamp["timestamp"] = modeldatetime
     timestamp = timestamp.set_index(timestamp.timestamp)
+    timestamp['year'] = timestamp.index.year
     timestamp['hour'] = timestamp.index.hour
     timestamp['day'] = timestamp.index.day
     timestamp['month'] = timestamp.index.month
@@ -114,12 +147,19 @@ def predict_queue(timestamp):
 
     if airport in airport_dict:
         timestamp[['ARN', 'BER', 'CPH', 'DUS', 'FRA', 'OSL', 'AMS', 'DUB']] = airport_dict[airport]
+    
+    df = get_data()    
+    airport_row = df[df[airport] == 1].iloc[0]
+    timestamp['yesterday_average_queue'] = airport_row.yesterday_average_queue
+    timestamp['lastweek_average_queue'] = airport_row.lastweek_average_queue
 
+    
     # Apply add_holiday_feature to add a column indicating whether the time is a holiday or not.
+    
     timestamp = add_holiday_feature(timestamp)
-
     timestamp.drop('timestamp', axis=1, inplace=True)
     timestamp = timestamp.drop(columns=['airport'])
+    print(timestamp)
     predict = model.predict(timestamp)
     predict = predict * 1.33
     return round(predict[0])

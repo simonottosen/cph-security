@@ -4,7 +4,7 @@ import urllib.request
 import json
 import holidays
 from lightgbm import LGBMRegressor
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask_caching import Cache
 from flask_crontab import Crontab
 import os
@@ -12,7 +12,7 @@ import os
 if os.environ.get("CPHAPI_HOST"):
     CPHAPI_HOST = os.environ.get("CPHAPI_HOST")
 else:
-    CPHAPI_HOST = "http://cphapi.simonottosen.dk"
+    CPHAPI_HOST = "https://waitport.com/api/v1/all"
 
 
 
@@ -159,7 +159,6 @@ def predict_queue(timestamp):
     timestamp = add_holiday_feature(timestamp)
     timestamp.drop('timestamp', axis=1, inplace=True)
     timestamp = timestamp.drop(columns=['airport'])
-    print(timestamp)
     predict = model.predict(timestamp)
     predict = predict * 1.33
     return round(predict[0])

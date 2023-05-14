@@ -44,9 +44,9 @@ def get_data():
     '''
     now = datetime.now()
     newmodeldata_url = (str(CPHAPI_HOST) + str("?select=id,queue,timestamp,airport"))
-    data = urllib.request.urlopen(newmodeldata_url).read()
-    output = json.loads(data)
-    dataframe = pd.DataFrame(output)
+    print("Loaded data successfully")
+    dataframe = pd.read_json(newmodeldata_url)
+    print("Loaded data successfully")
     StartTime = dataframe["timestamp"]
     StartTime = pd.to_datetime(StartTime)
     StartTime = StartTime.apply(lambda t: t.replace(tzinfo=None))
@@ -115,14 +115,9 @@ def predict_queue(timestamp):
     This function takes input timestamp and predicts the queue length based on a pre-trained LightGBM model.
     '''
     now = datetime.now()
-    newmodeldata_url = (str(CPHAPI_HOST) + str("?select=id,queue,timestamp,airport"))
-    data = urllib.request.urlopen(newmodeldata_url).read()
-    output = json.loads(data)
-    dataframe = pd.DataFrame(output)
-    data = dataframe.set_index(dataframe.timestamp)
 
     # Manipulating input data to get features out of it
-    print(timestamp)
+    #print(timestamp)
     airport = timestamp["airport"].iloc[0]
     modeldatetime = timestamp["timestamp"]
     modeldatetime = pd.to_datetime(modeldatetime)

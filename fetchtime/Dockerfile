@@ -6,7 +6,7 @@ RUN mkdir /home/user/app
 ADD setup.py /home/user/app
 ADD project /home/user/app/app
 WORKDIR /home/user/app/
-RUN pip install pipenv
+RUN pip install --no-cache-dir pipenv
 COPY Pipfile /home/user/app
 RUN pipenv lock
 RUN pipenv install --system --dev

@@ -5,7 +5,7 @@ ENV PYTHONDONTWRITEBYTECODE 1
 # Set environment varibles
 WORKDIR /project/
 # Install dependencies
-RUN pip install pipenv
+RUN pip install --no-cache-dir pipenv
 COPY Pipfile /project/
 RUN pipenv lock
 RUN pipenv install --system --dev

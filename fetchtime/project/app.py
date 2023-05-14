@@ -6,7 +6,6 @@ import os
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
-import urllib.request
 import re
 
 # This function performs a healthcheck.
@@ -78,10 +77,10 @@ def firebase_write(airport):
     # create url for getting data from CPH API by appending airport code (three-letter code)
     apiurl=(str(CPHAPI_HOST)+str("/waitingtime?&order=id.desc&limit=1&airport=eq.")+str(airport))
     
-    # read data fetched from API endpoint using urllib.request.urlopen and store it in data
-    data = urllib.request.urlopen(apiurl).read()
-    output = json.loads(data)
-    aDict = output[0]
+    # read data fetched from API endpoint using urllib.request.urlopen and store it in data    
+    response = requests.get(apiurl)
+    data = response.json()
+    aDict = data[0]
         
     # create a dictionary object with keys 'id', 'queue', 'timestamp' and 'airport' and their respective values
     data = {

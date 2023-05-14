@@ -69,7 +69,7 @@ Get the current waiting time
 ```
 http://localhost:3000/waitingtime?select=queue&order=id.desc&limit=1
 ```
-
+[![CodeFactor](https://www.codefactor.io/repository/github/simonottosen/cph-security/badge)](https://www.codefactor.io/repository/github/simonottosen/cph-security)
 
 ## API-documentation
 

@@ -4,7 +4,7 @@ services:
   cph_postgres_db:
     image: postgres:latest
     container_name: "cph_postgres_db"
-    environment: 
+    environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -23,7 +23,7 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
-    environment: 
+    environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}

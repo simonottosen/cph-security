@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from flask_caching import Cache
 from flask_crontab import Crontab
 import os
+import time
 
 if os.environ.get("CPHAPI_HOST"):
     CPHAPI_HOST = os.environ.get("CPHAPI_HOST")
@@ -39,12 +40,12 @@ def add_holiday_feature(df):
 
 @cache.memoize()
 def get_data():
+    start_time_load_data = time.time()
     '''
     This function fetches the external dataset from API endpoint.
     '''
     now = datetime.now()
     newmodeldata_url = (str(CPHAPI_HOST) + str("?select=id,queue,timestamp,airport"))
-    print("Loaded data successfully")
     dataframe = pd.read_json(newmodeldata_url)
     print("Loaded data successfully")
     StartTime = dataframe["timestamp"]
@@ -91,12 +92,13 @@ def get_data():
     df = add_holiday_feature(df)
 
     df.drop(['id'], axis=1, inplace=True)
-
+    print("Returned data successfully in %.2f seconds " % (time.time() - start_time_load_data))
     return df
 
 @cache.memoize()
 def train_model():
-
+    start_time_train_model = time.time()
+    print("Started model training")
     # Fetching external dataset from API endpoint to train the model
     df = get_data()
 
@@ -106,6 +108,7 @@ def train_model():
     y_train = y
     model = LGBMRegressor(random_state=42)  # Using LightGBM model to train on data
     model.fit(X_train, y_train)
+    print("Trained model succesfully in %.2f seconds " % (time.time() - start_time_train_model))
     return model
 
 
@@ -115,7 +118,6 @@ def predict_queue(timestamp):
     This function takes input timestamp and predicts the queue length based on a pre-trained LightGBM model.
     '''
     now = datetime.now()
-
     # Manipulating input data to get features out of it
     #print(timestamp)
     airport = timestamp["airport"].iloc[0]
@@ -161,9 +163,11 @@ def predict_queue(timestamp):
 
 @app.route('/predict')
 def make_prediction():
+    start_time_predict = time.time()
     '''
     This route provides interface to take timestamp as parameter and invoke predict_queue method
     '''
+    print("Received request to predict queue")
     input_date_str = request.args.get('timestamp')
     airport_code = request.args.get('airport')
     valid_airports = ['ARN', 'BER', 'CPH', 'DUS', 'FRA', 'OSL', 'AMS', 'DUB']
@@ -187,19 +191,22 @@ def make_prediction():
     airport_code = airport_code.upper()
     input_data = pd.DataFrame({'timestamp': [input_date], 'airport': [airport_code]})
     output = {'predicted_queue_length_minutes': predict_queue(input_data)}
+    print("Predicted successfully in %.2f seconds " % (time.time() - start_time_predict))
     return jsonify(output)
 
-model = None
+
 def load_model():
-    global model
-    model = train_model()
-load_model()
+    return train_model()
+
+model = load_model()
+
 
 crontab = Crontab(app)
 @crontab.job(minute=0, hour=0)
 def train():
-    print('Training model...')
-    train_model()
+    global model
+    print('Training model due to crontab...')
+    model = train_model()
 
 # Main section to be executed after importing module.
 if __name__ == '__main__':

@@ -1,4 +1,8 @@
+
+
 # Airport Security Queue
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/simonottosen/cph-security/blob/main/LICENSE)
+[![CodeFactor](https://www.codefactor.io/repository/github/simonottosen/cph-security/badge)](https://www.codefactor.io/repository/github/simonottosen/cph-security)
 
 This tool is designed to provide estimates of the security queue in the CPH airport at a user-defined point in time in the future. The tool uses Machine Learning based on historical data to estimate the queue.
 
@@ -69,7 +73,7 @@ Get the current waiting time
 ```
 http://localhost:3000/waitingtime?select=queue&order=id.desc&limit=1
 ```
-[![CodeFactor](https://www.codefactor.io/repository/github/simonottosen/cph-security/badge)](https://www.codefactor.io/repository/github/simonottosen/cph-security)
+
 
 ## API-documentation
 

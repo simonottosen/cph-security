@@ -75,7 +75,7 @@ def firebase_write(airport):
     firebase_admin.initialize_app(cred)
     db = firestore.client()
     # create url for getting data from CPH API by appending airport code (three-letter code)
-    apiurl=(str(CPHAPI_HOST)+str("/waitingtime?&order=id.desc&limit=1&airport=eq.")+str(airport))
+    apiurl=(str(CPHAPI_HOST)+str("?order=id.desc&limit=1&airport=eq.")+str(airport))
     
     # read data fetched from API endpoint using urllib.request.urlopen and store it in data    
     response = requests.get(apiurl)

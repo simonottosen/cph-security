@@ -9,6 +9,7 @@ from flask_caching import Cache
 from flask_crontab import Crontab
 import os
 import time
+import joblib
 
 if os.environ.get("CPHAPI_HOST"):
     CPHAPI_HOST = os.environ.get("CPHAPI_HOST")
@@ -96,6 +97,64 @@ def get_data():
     return df
 
 @cache.memoize()
+def get_data_light():
+    start_time_load_data = time.time()
+    '''
+    This function fetches the external dataset from API endpoint.
+    '''
+    now = datetime.now()
+    newmodeldata_url = (str(CPHAPI_HOST) + str("?select=id,queue,timestamp,airport&order=id.desc&limit=20000"))
+    dataframe = pd.read_json(newmodeldata_url)
+    print("Loaded light dataset successfully in %.2f seconds " % (time.time() - start_time_load_data))
+    StartTime = dataframe["timestamp"]
+    StartTime = pd.to_datetime(StartTime)
+    StartTime = StartTime.apply(lambda t: t.replace(tzinfo=None))
+    StartTime = StartTime + pd.DateOffset(hours=2)
+    dataframe["timestamp"] = StartTime
+    df = dataframe.set_index(dataframe.timestamp)
+    df.drop('timestamp', axis=1, inplace=True)
+    df['year'] = df.index.year
+    df['hour'] = df.index.hour
+    df['day'] = df.index.day
+    df['month'] = df.index.month
+    df['weekday'] = df.index.weekday
+    df_airport = pd.get_dummies(df['airport'])
+    df_test = pd.concat([df, df_airport], axis=1)
+    df = df_test
+    df = df.drop(columns=['airport'])
+    for airport_code in ['AMS', 'ARN', 'BER', 'CPH', 'DUB', 'DUS', 'FRA', 'OSL']:
+        airport_data = df[df[airport_code] == 1]
+        
+        yesterday = now - timedelta(days=1)
+        yesterday_data = airport_data[(airport_data['year'] == yesterday.year) &
+                                      (airport_data['month'] == yesterday.month) &
+                                      (airport_data['day'] == yesterday.day)]
+        
+        yesterday_data_between_7_and_22 = yesterday_data[(yesterday_data['hour'] >= 7) & 
+                                                         (yesterday_data['hour'] <= 22)]
+        yesterday_average_queue = yesterday_data_between_7_and_22['queue'].mean()
+        
+        df.loc[df[airport_code] == 1, 'yesterday_average_queue'] = yesterday_average_queue
+        
+        now = pd.Timestamp.now().floor('H')
+        week_ago = now - pd.Timedelta(days=7)
+        mask = (df.index >= week_ago) & (df.index <= now)
+        mask &= (df.index.hour >= 7) & (df.index.hour <= 22)
+        mask &= (df[airport_code] == 1)
+        lastweek_average_queue = df[mask]['queue'].reset_index(drop=True).rolling(24).mean().iloc[-1]
+        df.loc[df[airport_code] == 1, 'lastweek_average_queue'] = lastweek_average_queue
+
+
+        
+    # Adding Holiday features to dataframe
+    df = add_holiday_feature(df)
+
+    df.drop(['id'], axis=1, inplace=True)
+    print("Returned light dataset successfully in %.2f seconds " % (time.time() - start_time_load_data))
+    return df
+
+
+#@cache.memoize()
 def train_model():
     start_time_train_model = time.time()
     print("Started model training")
@@ -109,6 +168,12 @@ def train_model():
     model = LGBMRegressor(random_state=42)  # Using LightGBM model to train on data
     model.fit(X_train, y_train)
     print("Trained model succesfully in %.2f seconds " % (time.time() - start_time_train_model))
+    
+    
+    # Save trained model to disk
+    joblib.dump(model, 'trained_model.joblib')
+    print("Saved trained model to disk")
+    
     return model
 
 
@@ -145,7 +210,7 @@ def predict_queue(timestamp):
     if airport in airport_dict:
         timestamp[['ARN', 'BER', 'CPH', 'DUS', 'FRA', 'OSL', 'AMS', 'DUB']] = airport_dict[airport]
     
-    df = get_data()    
+    df = get_data_light()    
     airport_row = df[df[airport] == 1].iloc[0]
     timestamp['yesterday_average_queue'] = airport_row.yesterday_average_queue
     timestamp['lastweek_average_queue'] = airport_row.lastweek_average_queue
@@ -156,6 +221,7 @@ def predict_queue(timestamp):
     timestamp = add_holiday_feature(timestamp)
     timestamp.drop('timestamp', axis=1, inplace=True)
     timestamp = timestamp.drop(columns=['airport'])
+    model = load_model()
     predict = model.predict(timestamp)
     predict = predict * 1.33
     return round(predict[0])
@@ -196,16 +262,24 @@ def make_prediction():
 
 
 def load_model():
-    return train_model()
-
-model = load_model()
+    try:
+        # Load trained model from disk
+        model = joblib.load('trained_model.joblib')
+        print("Loaded trained model from disk")
+    except FileNotFoundError:
+        print("Error: Saved model file not found")
+        model = None
+    except Exception as e:
+        print(f"Error loading saved model file: {e}")
+        model = None
+    return model
 
 
 crontab = Crontab(app)
 @crontab.job(minute=0, hour=0)
 def train():
     global model
-    print('Training model due to crontab...')
+    print(f'Training model due to crontab... ({datetime.datetime.now()})')
     model = train_model()
 
 # Main section to be executed after importing module.

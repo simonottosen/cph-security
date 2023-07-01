@@ -208,7 +208,7 @@ function App() {
           <footer class="py-3 my-4">
             <ul class="nav justify-content-center border-bottom pb-3 mb-3">
               <li class="nav-item"><a href="https://simonottosen.dk/" class="nav-link px-2 text-muted">Other projects</a></li>
-              <li class="nav-item"><a href="https://waitport.com/api/v1/cph" class="nav-link px-2 text-muted">API</a></li>
+              <li class="nav-item"><a href="https://waitport.com/api/v1/all?order=id.desc&limit=100" class="nav-link px-2 text-muted">API</a></li>
               <li class="nav-item"><a href="https://github.com/simonottosen/cph-security" class="nav-link px-2 text-muted">GitHub</a></li>
             </ul>
             <p class="text-center text-muted">Made with ❤️ by Simon Ottosen</p>

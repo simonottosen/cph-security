@@ -10,6 +10,7 @@ from flask_crontab import Crontab
 import os
 import time
 import joblib
+import numpy as np
 
 if os.environ.get("CPHAPI_HOST"):
     CPHAPI_HOST = os.environ.get("CPHAPI_HOST")
@@ -20,6 +21,11 @@ else:
 
 # Create Flask app instance
 app = Flask(__name__)
+
+
+
+
+
 cache = Cache(app, config={'CACHE_TYPE': 'simple'})
 
 # Adding Denmark holidays to be used in add_holiday_features function
@@ -48,7 +54,7 @@ def get_data():
     now = datetime.now()
     newmodeldata_url = (str(CPHAPI_HOST) + str("?select=id,queue,timestamp,airport"))
     dataframe = pd.read_json(newmodeldata_url)
-    print("Loaded data successfully")
+    print("Loaded data successfully in %.2f seconds " % (time.time() - start_time_load_data))
     StartTime = dataframe["timestamp"]
     StartTime = pd.to_datetime(StartTime)
     StartTime = StartTime.apply(lambda t: t.replace(tzinfo=None))
@@ -211,10 +217,17 @@ def predict_queue(timestamp):
         timestamp[['ARN', 'BER', 'CPH', 'DUS', 'FRA', 'OSL', 'AMS', 'DUB']] = airport_dict[airport]
     
     df = get_data_light()    
-    airport_row = df[df[airport] == 1].iloc[0]
-    timestamp['yesterday_average_queue'] = airport_row.yesterday_average_queue
-    timestamp['lastweek_average_queue'] = airport_row.lastweek_average_queue
+    # Create a new column "date" by concatenating year, month, day, and hour
+    df["date"] = pd.to_datetime(df[["year", "month", "day", "hour"]])
 
+    # Sort the DataFrame by the "date" column in descending order
+    df_sorted = df.sort_values("date", ascending=False)
+
+    # Find the first row where CPH is True
+    newest_row = df_sorted[df_sorted[airport] == True].iloc[0]
+
+    timestamp['yesterday_average_queue'] = newest_row["yesterday_average_queue"]
+    timestamp['lastweek_average_queue'] = newest_row["lastweek_average_queue"]
     
     # Apply add_holiday_feature to add a column indicating whether the time is a holiday or not.
     
@@ -273,6 +286,11 @@ def load_model():
         print(f"Error loading saved model file: {e}")
         model = None
     return model
+
+@app.before_first_request
+def setup():
+    print("Loading Waitport application")
+    train_model()
 
 
 crontab = Crontab(app)

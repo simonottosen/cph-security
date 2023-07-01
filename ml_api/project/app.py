@@ -287,8 +287,7 @@ def load_model():
         model = None
     return model
 
-@app.before_first_request
-def setup():
+with app.app_context():
     print("Loading Waitport application")
     train_model()
 

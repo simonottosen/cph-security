@@ -11,7 +11,8 @@ import os
 import time
 import joblib
 import numpy as np
-from xgboost import XGBRegressor
+import xgboost as xgb
+from sklearn.model_selection import train_test_split
 
 
 if os.environ.get("CPHAPI_HOST"):
@@ -53,43 +54,56 @@ def get_data():
     '''
     This function fetches the external dataset from API endpoint.
     '''
-    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    newmodeldata_url = f"{CPHAPI_HOST}?select=id,queue,timestamp,airport"
-    df = pd.read_json(newmodeldata_url)
-
-    print(f"Loaded data successfully in {time.time() - start_time_load_data:.2f} seconds")
-
-    df.set_index(pd.to_datetime(df["timestamp"]).dt.tz_localize(None) + pd.DateOffset(hours=2), inplace=True)
+    now = datetime.now()
+    newmodeldata_url = (str(CPHAPI_HOST) + str("?select=id,queue,timestamp,airport"))
+    dataframe = pd.read_json(newmodeldata_url)
+    print("Loaded data successfully in %.2f seconds " % (time.time() - start_time_load_data))
+    StartTime = dataframe["timestamp"]
+    StartTime = pd.to_datetime(StartTime)
+    StartTime = StartTime.apply(lambda t: t.replace(tzinfo=None))
+    StartTime = StartTime + pd.DateOffset(hours=2)
+    dataframe["timestamp"] = StartTime
+    df = dataframe.set_index(dataframe.timestamp)
     df.drop('timestamp', axis=1, inplace=True)
-    
-    for col in ['year', 'hour', 'day', 'month', 'weekday']:
-        df[col] = getattr(df.index, col)
-        
-    df = pd.concat([df, pd.get_dummies(df.pop('airport'))], axis=1)
-    
+    df['year'] = df.index.year
+    df['hour'] = df.index.hour
+    df['day'] = df.index.day
+    df['month'] = df.index.month
+    df['weekday'] = df.index.weekday
+    df_airport = pd.get_dummies(df['airport'])
+    df_test = pd.concat([df, df_airport], axis=1)
+    df = df_test
+    df = df.drop(columns=['airport'])
     for airport_code in ['AMS', 'ARN', 'BER', 'CPH', 'DUB', 'DUS', 'FRA', 'OSL']:
-        mask_airport = (df[airport_code] == 1)
-        mask_yesterday = ((df['year'] == now.year - 1) & 
-                          (df['month'] == now.month) & 
-                          (df['day'] == now.day))
-        mask_hours = ((df['hour'] >= 7) & (df['hour'] <= 22))
-
-        df.loc[mask_airport, 'yesterday_average_queue'] = df.loc[mask_airport & mask_yesterday & mask_hours, 'queue'].mean()
+        airport_data = df[df[airport_code] == 1]
+        
+        yesterday = now - timedelta(days=1)
+        yesterday_data = airport_data[(airport_data['year'] == yesterday.year) &
+                                      (airport_data['month'] == yesterday.month) &
+                                      (airport_data['day'] == yesterday.day)]
+        
+        yesterday_data_between_7_and_22 = yesterday_data[(yesterday_data['hour'] >= 7) & 
+                                                         (yesterday_data['hour'] <= 22)]
+        yesterday_average_queue = yesterday_data_between_7_and_22['queue'].mean()
+        
+        df.loc[df[airport_code] == 1, 'yesterday_average_queue'] = yesterday_average_queue
         
         now = pd.Timestamp.now().floor('H')
         week_ago = now - pd.Timedelta(days=7)
-        mask_week = ((df.index >= week_ago) & (df.index <= now))
+        mask = (df.index >= week_ago) & (df.index <= now)
+        mask &= (df.index.hour >= 7) & (df.index.hour <= 22)
+        mask &= (df[airport_code] == 1)
+        lastweek_average_queue = df[mask]['queue'].reset_index(drop=True).rolling(24).mean().iloc[-1]
+        df.loc[df[airport_code] == 1, 'lastweek_average_queue'] = lastweek_average_queue
 
-        df.loc[mask_airport, 'lastweek_average_queue'] = df.loc[mask_airport & mask_week & mask_hours, 'queue'].reset_index(drop=True).rolling(24).mean().iloc[-1]
 
+        
     # Adding Holiday features to dataframe
     df = add_holiday_feature(df)
 
     df.drop(['id'], axis=1, inplace=True)
-    
-    print(f"Returned data successfully in {time.time() - start_time_load_data:.2f} seconds")
+    print("Returned data successfully in %.2f seconds " % (time.time() - start_time_load_data))
     return df
-
 
 @cache.memoize()
 def get_data_light():
@@ -97,57 +111,87 @@ def get_data_light():
     '''
     This function fetches the external dataset from API endpoint.
     '''
-    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    newmodeldata_url = f"{CPHAPI_HOST}?select=id,queue,timestamp,airport&order=id.desc&limit=20000"
-    df = pd.read_json(newmodeldata_url)
-
-    print(f"Loaded light dataset successfully in {time.time() - start_time_load_data:.2f} seconds")
-
-    df.set_index(pd.to_datetime(df["timestamp"]).dt.tz_localize(None) + pd.DateOffset(hours=2), inplace=True)
+    now = datetime.now()
+    newmodeldata_url = (str(CPHAPI_HOST) + str("?select=id,queue,timestamp,airport&order=id.desc&limit=20000"))
+    dataframe = pd.read_json(newmodeldata_url)
+    print("Loaded light dataset successfully in %.2f seconds " % (time.time() - start_time_load_data))
+    StartTime = dataframe["timestamp"]
+    StartTime = pd.to_datetime(StartTime)
+    StartTime = StartTime.apply(lambda t: t.replace(tzinfo=None))
+    StartTime = StartTime + pd.DateOffset(hours=2)
+    dataframe["timestamp"] = StartTime
+    df = dataframe.set_index(dataframe.timestamp)
     df.drop('timestamp', axis=1, inplace=True)
-    
-    for col in ['year', 'hour', 'day', 'month', 'weekday']:
-        df[col] = getattr(df.index, col)
-        
-    df = pd.concat([df, pd.get_dummies(df.pop('airport'))], axis=1)
-    
+    df['year'] = df.index.year
+    df['hour'] = df.index.hour
+    df['day'] = df.index.day
+    df['month'] = df.index.month
+    df['weekday'] = df.index.weekday
+    df_airport = pd.get_dummies(df['airport'])
+    df_test = pd.concat([df, df_airport], axis=1)
+    df = df_test
+    df = df.drop(columns=['airport'])
     for airport_code in ['AMS', 'ARN', 'BER', 'CPH', 'DUB', 'DUS', 'FRA', 'OSL']:
-        mask_airport = (df[airport_code] == 1)
-        mask_yesterday = ((df['year'] == now.year - 1) & 
-                          (df['month'] == now.month) & 
-                          (df['day'] == now.day))
-        mask_hours = ((df['hour'] >= 7) & (df['hour'] <= 22))
-
-        df.loc[mask_airport, 'yesterday_average_queue'] = df.loc[mask_airport & mask_yesterday & mask_hours, 'queue'].mean()
+        airport_data = df[df[airport_code] == 1]
+        
+        yesterday = now - timedelta(days=1)
+        yesterday_data = airport_data[(airport_data['year'] == yesterday.year) &
+                                      (airport_data['month'] == yesterday.month) &
+                                      (airport_data['day'] == yesterday.day)]
+        
+        yesterday_data_between_7_and_22 = yesterday_data[(yesterday_data['hour'] >= 7) & 
+                                                         (yesterday_data['hour'] <= 22)]
+        yesterday_average_queue = yesterday_data_between_7_and_22['queue'].mean()
+        
+        df.loc[df[airport_code] == 1, 'yesterday_average_queue'] = yesterday_average_queue
         
         now = pd.Timestamp.now().floor('H')
         week_ago = now - pd.Timedelta(days=7)
-        mask_week = ((df.index >= week_ago) & (df.index <= now))
+        mask = (df.index >= week_ago) & (df.index <= now)
+        mask &= (df.index.hour >= 7) & (df.index.hour <= 22)
+        mask &= (df[airport_code] == 1)
+        lastweek_average_queue = df[mask]['queue'].reset_index(drop=True).rolling(24).mean().iloc[-1]
+        df.loc[df[airport_code] == 1, 'lastweek_average_queue'] = lastweek_average_queue
 
-        df.loc[mask_airport, 'lastweek_average_queue'] = df.loc[mask_airport & mask_week & mask_hours, 'queue'].reset_index(drop=True).rolling(24).mean().iloc[-1]
 
+        
     # Adding Holiday features to dataframe
     df = add_holiday_feature(df)
 
     df.drop(['id'], axis=1, inplace=True)
-    
-    print(f"Returned light dataset successfully in {time.time() - start_time_load_data:.2f} seconds")
+    print("Returned light dataset successfully in %.2f seconds " % (time.time() - start_time_load_data))
     return df
 
 
-@cache.memoize()
+#@cache.memoize()
 def train_model():
     start_time_train_model = time.time()
     print("Started model training")
     # Fetching external dataset from API endpoint to train the model
     df = get_data()
 
+    # Drop rows with NaN or infinity in 'queue'
+    df = df.replace([np.inf, -np.inf], np.nan)
+    df = df.dropna(subset=['queue'])
+
+    # Check if 'queue' contains very large values
+    max_value = df['queue'].max()
+
+    if max_value > 1e10:  # change this threshold as per your specific use case
+        print(f"'queue' contains very large values, max value: {max_value}")
+
     X = df.drop('queue', axis=1)
     y = df['queue']
-    X_train = X
-    y_train = y
-    model = LGBMRegressor(random_state=42)  # Using LightGBM model to train on data
+
+    # split data into train and test sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=7)
+
+    # define the model
+    model = xgb.XGBRegressor(objective ='reg:squarederror')
+
+    # fit the model
     model.fit(X_train, y_train)
+
     print("Trained model succesfully in %.2f seconds " % (time.time() - start_time_train_model))
     
     
@@ -178,18 +222,18 @@ def predict_queue(timestamp):
     timestamp['weekday'] = timestamp.index.weekday
 
     airport_dict = {
-        "ARN": [1, 0, 0, 0, 0, 0, 0, 0],
-        "BER": [0, 1, 0, 0, 0, 0, 0, 0],
-        "CPH": [0, 0, 1, 0, 0, 0, 0, 0],
-        "DUS": [0, 0, 0, 1, 0, 0, 0, 0],
-        "FRA": [0, 0, 0, 0, 1, 0, 0, 0],
-        "OSL": [0, 0, 0, 0, 0, 1, 0, 0],
-        "AMS": [0, 0, 0, 0, 0, 0, 1, 0],
-        "DUB": [0, 0, 0, 0, 0, 0, 0, 1]
+        "AMS": [1, 0, 0, 0, 0, 0, 0, 0],
+        "ARN": [0, 1, 0, 0, 0, 0, 0, 0],
+        "BER": [0, 0, 1, 0, 0, 0, 0, 0],
+        "CPH": [0, 0, 0, 1, 0, 0, 0, 0],
+        "DUB": [0, 0, 0, 0, 1, 0, 0, 0],
+        "DUS": [0, 0, 0, 0, 0, 1, 0, 0],
+        "FRA": [0, 0, 0, 0, 0, 0, 1, 0],
+        "OSL": [0, 0, 0, 0, 0, 0, 0, 1]
     }
 
     if airport in airport_dict:
-        timestamp[['ARN', 'BER', 'CPH', 'DUS', 'FRA', 'OSL', 'AMS', 'DUB']] = airport_dict[airport]
+        timestamp[['AMS', 'ARN', 'BER', 'CPH', 'DUB', 'DUS', 'FRA', 'OSL']] = airport_dict[airport]
     
     df = get_data_light()    
     # Create a new column "date" by concatenating year, month, day, and hour

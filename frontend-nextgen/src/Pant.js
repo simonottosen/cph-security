@@ -16,7 +16,6 @@ function App() {
   const [queue, setQueue] = useState(null);
   const [averageQueue, setAverageQueue] = useState(null);
   const [selectedDateTime, setSelectedDateTime] = useState(new Date());
-  const [predictedQueueLength, setPredictedQueueLength] = useState(null);
 
   useEffect(() => {
     document.title = 'Pantport - Fields Pant Security Queue';
@@ -72,20 +71,6 @@ function App() {
     airportName = 'Fields Pantstation';
   }
 
-
-  const day = selectedDateTime.getDate();
-  const month = selectedDateTime.toLocaleString('default', { month: 'long' });
-  const hour = selectedDateTime.getHours();
-  const minute = selectedDateTime.getMinutes().toString().padStart(2, '0');
-
-  const formattedDate = `${day}${getOrdinalSuffix(day)} of ${month} at ${hour}:${minute}`;
-
-  function getOrdinalSuffix(day) {
-    const suffixes = ['th', 'st', 'nd', 'rd'];
-    const lastDigit = day % 10;
-    return suffixes[(day % 100 - 10) in [11, 12, 13] ? 0 :
-      (lastDigit > 3) ? 0 : lastDigit];
-  }
 
 
 

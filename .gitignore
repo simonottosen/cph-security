@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .env
+frontend-nextgen/.env
 
 
 # C extensions
@@ -137,3 +138,4 @@ dmypy.json
 # Pyre type checker
 .pyre/
 frontend-nextgen/node_modules/.bin/acorn
+.env

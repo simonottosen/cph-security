@@ -9,10 +9,8 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import "./App.css";
 import 'moment/locale/da';
 import { Link } from 'react-router-dom';
-console.log(process.env) // remove this after you've confirmed it is working
 
-const API_URL = process.env.REACT_APP_API_HOST
-
+const API_URL = process.env.REACT_APP_API_HOST || "/api/v1/predict";
 
 function App() {
   const [selectedAirport, setSelectedAirport] = useState("cph");

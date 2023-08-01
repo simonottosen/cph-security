@@ -9,7 +9,9 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import "./App.css";
 import 'moment/locale/da';
 import { Link } from 'react-router-dom';
+require('dotenv').config()
 
+const API_URL = process.env.REACT_APP_API_HOST
 
 
 function App() {
@@ -35,7 +37,7 @@ function App() {
     const fetchQueueInformation = async () => {
       try {
         const response = await axios.get(
-          `https://waitport.com/api/v1/all?airport=eq.${selectedAirport.toUpperCase()}&limit=1&select=queue&order=id.desc`
+          `https://waitport.com?airport=eq.${selectedAirport.toUpperCase()}&limit=1&select=queue&order=id.desc`
         );
         setQueue(response.data[0].queue);
       } catch (error) {
@@ -71,7 +73,7 @@ function App() {
           .slice(0, 16)
           .replace("T", "T");
         const response = await axios.get(
-          `https://waitport.com/api/v1/predict?timestamp=${dateTimeString}&airport=${selectedAirport.toLowerCase()}`
+          `https://waitport.com${API_URL}?timestamp=${dateTimeString}&airport=${selectedAirport.toLowerCase()}`
         );
         setPredictedQueueLength(response.data.predicted_queue_length_minutes);
       } catch (error) {

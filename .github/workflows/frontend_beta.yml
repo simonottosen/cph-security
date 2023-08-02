@@ -1,12 +1,12 @@
-name: Publish frontend image for production
+name: Publish frontend image for beta
 
 on:
   push:
-    branches: [main]
+    branches: [beta]
 
 env:
   REGISTRY: ghcr.io
-  FRONTENDNEXTGEN_NAME: ${{ github.repository }}_frontend-nextgen
+  FRONTENDNEXTGEN_NAME: ${{ github.repository }}_frontend-nextgen_beta
 
 jobs:
   build-frontend-nextgen:

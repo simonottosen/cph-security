@@ -1,12 +1,12 @@
-name: Publish ML API image for production
+name: Publish ML API image for beta
 
 on:
   push:
-    branches: [main]
+    branches: [beta]
 
 env:
   REGISTRY: ghcr.io
-  ML_API_NAME: ${{ github.repository }}_ml_api
+  ML_API_NAME: ${{ github.repository }}_ml_api_beta
 
 jobs:
   build-ml-api:

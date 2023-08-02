@@ -1,15 +1,15 @@
-name: Publish frontend image for production
+name: Publish fetchtime image for beta
 
 on:
   push:
-    branches: [main]
+    branches: [beta]
 
 env:
   REGISTRY: ghcr.io
-  FRONTENDNEXTGEN_NAME: ${{ github.repository }}_frontend-nextgen
+  FETCHTIME_NAME: ${{ github.repository }}_fetchtime_beta
 
 jobs:
-  build-frontend-nextgen:
+  build-fetchtime:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -30,12 +30,12 @@ jobs:
         id: meta
         uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
         with:
-          images: ${{ env.REGISTRY }}/${{ env.FRONTENDNEXTGEN_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.FETCHTIME_NAME }}
 
-      - name: Push image
+      - name: Build and push Docker image
         uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
         with:
-          context: ./frontend-nextgen/
+          context: ./fetchtime/
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

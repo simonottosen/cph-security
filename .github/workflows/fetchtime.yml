@@ -1,4 +1,4 @@
-name: Publish fetchtime image
+name: Publish fetchtime image for production
 
 on:
   push:

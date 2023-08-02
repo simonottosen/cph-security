@@ -144,7 +144,7 @@ function App() {
               <li class="nav-item"><a href="https://waitport.com/api/v1/all?order=id.desc&limit=100" class="nav-link px-2 text-muted">API</a></li>
               <li class="nav-item"><a href="https://github.com/simonottosen/cph-security" class="nav-link px-2 text-muted">GitHub</a></li>
             </ul>
-            <p class="text-center text-muted">Made with <Link to="/pant">❤️</Link> by Simon Ottosen</p>
+            <p class="text-center text-muted">Made with <Link to="/" style={{ textDecoration: 'none' }}>❤️</Link> by Simon Ottosen</p>
           </footer>
         </div>
 

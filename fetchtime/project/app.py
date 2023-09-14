@@ -278,7 +278,7 @@ def oslo():
     # Use requests module to send a GET request to the airport API and retrieve waiting time information as JSON
     response = requests.get(airport_api)
     waitingtime = json.loads(response.text)
-    time_minutes_rounded = waitingtime.get("TimeMinutesRounded")
+    time_minutes_rounded = waitingtime.get("timeMinutesRounded")
 
     # If the first element of the extracted number list is an integer, assign its value to a queue variable. Otherwise print an error message
     if isinstance(time_minutes_rounded, int):

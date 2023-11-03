@@ -185,7 +185,20 @@ def copenhagen():
     # Use requests module to send a GET request to the airport API and retrieve waiting time information as JSON
     response = requests.get(airport_api)
     waitingtime = json.loads(response.text)
-    queue = (waitingtime["t2WaitingTime"])
+    t2_waiting_time_interval = waitingtime.get("t2WaitingTimeInterval")
+    t3_waiting_time_interval = waitingtime.get("t3WaitingTimeInterval")
+    
+    # Split the values using '-' as the delimiter
+    t2_waiting_time_interval = t2_waiting_time_interval.split("-")
+    t3_waiting_time_interval = t3_waiting_time_interval.split("-")
+    
+    # Convert the split values to integers
+    t2_waiting_time_interval = [int(x) for x in t2_waiting_time_interval]
+    t3_waiting_time_interval = [int(x) for x in t3_waiting_time_interval]
+    
+    # Calculate the average
+    average = (sum(t2_waiting_time_interval) + sum(t3_waiting_time_interval)) / (len(t2_waiting_time_interval) + len(t3_waiting_time_interval))
+    queue = int(round(average))
     timestamp = (waitingtime["deliveryId"])
 
     # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables

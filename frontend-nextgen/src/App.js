@@ -101,10 +101,6 @@ function App() {
     airportName = 'Stockholm Airport';
   }
 
-  if (selectedAirport === 'ber') {
-    airportName = 'Berlin Airport';
-  }
-
   if (selectedAirport === 'ams') {
     airportName = 'Amsterdam Airport';
   }
@@ -156,7 +152,6 @@ function App() {
               <Dropdown.Item eventKey="osl">🇳🇴 Oslo Gardermoen Airport</Dropdown.Item>
               <Dropdown.Item eventKey="arn">🇸🇪 Stockholm Arlanda Airport</Dropdown.Item>
               <Dropdown.Item eventKey="dus">🇩🇪 Düsseldorf International Airport</Dropdown.Item>
-              <Dropdown.Item eventKey="ber">🇩🇪 Berlin Brandenburg Airport</Dropdown.Item>
               <Dropdown.Item eventKey="ams">🇳🇱 Amsterdam Schipol Airport</Dropdown.Item>
               <Dropdown.Item eventKey="dub">🇮🇪 Dublin Airport</Dropdown.Item>
             </DropdownButton>

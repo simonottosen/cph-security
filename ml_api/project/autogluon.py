@@ -18,7 +18,7 @@ from sklearn.model_selection import RandomizedSearchCV
 from autogluon.timeseries import TimeSeriesDataFrame, TimeSeriesPredictor
 
 dk_holidays = holidays.Denmark()
-CPHAPI_HOST = "https://waitport.com/api/v1/all"
+CPHAPI_HOST = "https://waitport.com/api/v1/all?limit=1000"
 
 
 def add_holiday_feature(df):

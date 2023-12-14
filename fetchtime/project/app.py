@@ -314,44 +314,44 @@ def oslo():
     print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
 
 
-# This function retrieves the waiting time at Berlin airport
-def berlin():
-    # Define initial values
-    healthcheck = os.environ.get("BER_HEALTHCHECK") 
-    airport = "BER"
-    airport_api = "https://ber.berlin-airport.de/api.aplsv2.json?lang=en"
+# # This function retrieves the waiting time at Berlin airport. Currently removed as BER has blocked the server.
+# def berlin():
+#     # Define initial values
+#     healthcheck = os.environ.get("BER_HEALTHCHECK") 
+#     airport = "BER"
+#     airport_api = "https://ber.berlin-airport.de/api.aplsv2.json?lang=en"
 
-    # Use requests module to send a GET request to the airport API and retrieve waiting time information as JSON
-    response = requests.get(airport_api)
-    waitingtime = json.loads(response.text)
-    for i in waitingtime["data"]["apls-data"]:
-        if i["terminal"] == "T1" and i["security_control"] == "1":
-            low = i["low_minutes"]
+#     # Use requests module to send a GET request to the airport API and retrieve waiting time information as JSON
+#     response = requests.get(airport_api)
+#     waitingtime = json.loads(response.text)
+#     for i in waitingtime["data"]["apls-data"]:
+#         if i["terminal"] == "T1" and i["security_control"] == "1":
+#             low = i["low_minutes"]
 
-    for i in waitingtime["data"]["apls-data"]:
-            if i["terminal"] == "T1" and i["security_control"] == "1":
-                high = i["high_minutes"]
+#     for i in waitingtime["data"]["apls-data"]:
+#             if i["terminal"] == "T1" and i["security_control"] == "1":
+#                 high = i["high_minutes"]
 
-    time_minutes_rounded = high+low
-    time_minutes_rounded = time_minutes_rounded / 2
-    time_minutes_rounded = int(round(time_minutes_rounded, 1))
+#     time_minutes_rounded = high+low
+#     time_minutes_rounded = time_minutes_rounded / 2
+#     time_minutes_rounded = int(round(time_minutes_rounded, 1))
 
-    # If the first element of the extracted number list is an integer, assign its value to a queue variable. Otherwise print an error message
-    if type(time_minutes_rounded) == int:
-        queue = time_minutes_rounded
-    else:
-        print("Waiting time not found in the JSON data.")    
-    # Get current UTC datetime and format as string
-    now_utc = datetime.utcnow()
-    timestamp = now_utc.strftime('%Y-%m-%dT%H:%M:%S')
+#     # If the first element of the extracted number list is an integer, assign its value to a queue variable. Otherwise print an error message
+#     if type(time_minutes_rounded) == int:
+#         queue = time_minutes_rounded
+#     else:
+#         print("Waiting time not found in the JSON data.")    
+#     # Get current UTC datetime and format as string
+#     now_utc = datetime.utcnow()
+#     timestamp = now_utc.strftime('%Y-%m-%dT%H:%M:%S')
     
-    # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
-    database_write_status = database_write(queue, timestamp, airport)
-    firebase_write_status = firebase_write(airport)
-    healthcheck_perform_status = healthcheck_perform(healthcheck)
+#     # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
+#     database_write_status = database_write(queue, timestamp, airport)
+#     firebase_write_status = firebase_write(airport)
+#     healthcheck_perform_status = healthcheck_perform(healthcheck)
     
-    # Print a completion message with the status results from the three previous function calls
-    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+#     # Print a completion message with the status results from the three previous function calls
+#     print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
 
 
 def amsterdam():

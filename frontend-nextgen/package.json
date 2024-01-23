@@ -11,7 +11,7 @@
     "chart.js": "^4.4.1",
     "moment": "^2.29.4",
     "react": "^18.2.0",
-    "react-bootstrap": "^2.9.1",
+    "react-bootstrap": "^2.9.2",
     "react-datetime": "^3.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.21.0",

@@ -254,7 +254,7 @@ def predict_queue(timestamp):
     timestamp = timestamp.drop(columns=['airport'])
     model = load_model()
     predict = model.predict(timestamp)
-    predict = predict * 1.33
+    predict = predict + 1
     return round(predict[0])
 
 

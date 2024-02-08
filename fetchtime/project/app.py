@@ -105,7 +105,7 @@ def frankfurt():
     # Define initial values
     healthcheck = os.environ.get("FRA_HEALTHCHECK") 
     airport = "FRA"
-    airport_api = "https://www.frankfurt-airport.com/wartezeiten/rest/waz?lang=en"
+    airport_api = "https://www.frankfurt-airport.com/wartezeiten/appres/rest/waz?lang=en"
     
     # Use requests module to send a GET request to the airport API and retrieve waiting time information as JSON
     response = requests.get(airport_api)

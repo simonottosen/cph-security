@@ -81,7 +81,7 @@ def supabase_write(queue, timestamp, airport):
             .insert({"queue": queue, "timestamp": timestamp, "airport": airport}) \
             .execute()
         supabase_write_status = "Supabase write completed"
-    
+        supabase.auth.sign_out()
     except Exception as e:
         supabase_write_status = f"Supabase write failed with error: {e}"
     

@@ -7,6 +7,8 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
 import re
+from supabase import create_client, Client
+
 
 # This function performs a healthcheck.
 def healthcheck_perform(HEALTHCHECK):
@@ -65,6 +67,27 @@ def database_write(queue, timestamp, airport):
             
     return database_write_result
 
+def supabase_write(queue, timestamp, airport):
+    url: str = os.environ.get("SUPABASE_URL")
+    key: str = os.environ.get("SUPABASE_KEY")
+    email: str = os.environ.get("SUPABASE_EMAIL")
+    password: str = os.environ.get("SUPABASE_PASSWORD")
+
+    supabase: Client = create_client(url, key)
+    data = supabase.auth.sign_in_with_password({"email": email, "password": password})
+    
+    try:
+        data, count = supabase.table('waitingtime') \
+            .insert({"queue": queue, "timestamp": timestamp, "airport": airport}) \
+            .execute()
+        supabase_write_status = "Supabase write completed"
+    
+    except Exception as e:
+        supabase_write_status = f"Supabase write failed with error: {e}"
+    
+    return supabase_write_status
+
+    
 # This function writes data to Firebase database.
 def firebase_write(airport):
     CPHAPI_HOST = os.environ.get("CPHAPI_HOST") 
@@ -133,10 +156,11 @@ def frankfurt():
     # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
     database_write_status = database_write(queue, timestamp, airport)
     firebase_write_status = firebase_write(airport)
+    supabase_write_status = supabase_write(queue, timestamp, airport)
     healthcheck_perform_status = healthcheck_perform(healthcheck)
     
     # Print a completion message with the status results from the three previous function calls
-    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Supabase: "+str(supabase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
 
 # This function retrieves the waiting time at Dusseldorf airport
 def dusseldorf():
@@ -170,10 +194,11 @@ def dusseldorf():
         # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
         database_write_status = database_write(queue, timestamp, airport)
         firebase_write_status = firebase_write(airport)
+        supabase_write_status = supabase_write(queue, timestamp, airport)
         healthcheck_perform_status = healthcheck_perform(healthcheck)
         
         # Print a completion message with the status results from the three previous function calls
-        print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+        print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Supabase: "+str(supabase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
 
 # This function retrieves the waiting time at Copenhagen airport
 def copenhagen():
@@ -204,10 +229,11 @@ def copenhagen():
     # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
     database_write_status = database_write(queue, timestamp, airport)
     firebase_write_status = firebase_write(airport)
+    supabase_write_status = supabase_write(queue, timestamp, airport)
     healthcheck_perform_status = healthcheck_perform(healthcheck)
     
     # Print a completion message with the status results from the three previous function calls
-    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Supabase: "+str(supabase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
 
 # This function retrieves the waiting time at Arlanda airport
 def arlanda():
@@ -238,10 +264,11 @@ def arlanda():
     # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
     database_write_status = database_write(queue, timestamp, airport)
     firebase_write_status = firebase_write(airport)
+    supabase_write_status = supabase_write(queue, timestamp, airport)
     healthcheck_perform_status = healthcheck_perform(healthcheck)
     
     # Print a completion message with the status results from the three previous function calls
-    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Supabase: "+str(supabase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
 
 # This function retrieves the waiting time at Dublin airport
 def dublin():
@@ -273,10 +300,11 @@ def dublin():
     # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
     database_write_status = database_write(queue, timestamp, airport)
     firebase_write_status = firebase_write(airport)
+    supabase_write_status = supabase_write(queue, timestamp, airport)
     healthcheck_perform_status = healthcheck_perform(healthcheck)
     
     # Print a completion message with the status results from the three previous function calls
-    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Supabase: "+str(supabase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
 
 
 
@@ -308,10 +336,11 @@ def oslo():
     # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
     database_write_status = database_write(queue, timestamp, airport)
     firebase_write_status = firebase_write(airport)
+    supabase_write_status = supabase_write(queue, timestamp, airport)
     healthcheck_perform_status = healthcheck_perform(healthcheck)
     
     # Print a completion message with the status results from the three previous function calls
-    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Supabase: "+str(supabase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
 
 
 # # This function retrieves the waiting time at Berlin airport. Currently removed as BER has blocked the server.
@@ -348,6 +377,7 @@ def oslo():
 #     # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
 #     database_write_status = database_write(queue, timestamp, airport)
 #     firebase_write_status = firebase_write(airport)
+#     supabase_write_status = supabase_write(queue, timestamp, airport)
 #     healthcheck_perform_status = healthcheck_perform(healthcheck)
     
 #     # Print a completion message with the status results from the three previous function calls
@@ -380,8 +410,9 @@ def amsterdam():
     # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
     database_write_status = database_write(queue, timestamp, airport)
     firebase_write_status = firebase_write(airport)
+    supabase_write_status = supabase_write(queue, timestamp, airport)
     healthcheck_perform_status = healthcheck_perform(healthcheck)
     
     # Print a completion message with the status results from the three previous function calls
-    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Supabase: "+str(supabase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
 

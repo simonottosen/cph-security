@@ -245,9 +245,9 @@ def arlanda():
     # Use requests module to send a GET request to the airport API and retrieve waiting time information as JSON
     response = requests.get(airport_api)
     waitingtime = json.loads(response.text)
-    for queue_time in waitingtime['QueueTimesList']:
-        if queue_time['LocationName'] == 'Terminal 5F':
-            timeinput = {queue_time["Interval"]}
+    for queue_time in waitingtime['queueTimesList']:
+        if queue_time['locationName'] == 'Terminal 5F':
+            timeinput = {queue_time["interval"]}
     
     # Loop through data in the waiting time JSON until you find the relevant security checkpoint waiting time
     numbers = list(map(int,re.findall('\d+', str(timeinput))))

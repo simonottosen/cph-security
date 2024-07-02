@@ -84,21 +84,29 @@ function App() {
   
 
   let airportName;
+  
+  if (selectedAirport === 'cph') {
+    airportName = 'Copenhagen Airport';
+  }
 
   if (selectedAirport === 'osl') {
     airportName = 'Oslo Airport';
   }
 
-  if (selectedAirport === 'cph') {
-    airportName = 'Copenhagen Airport';
+    if (selectedAirport === 'arn') {
+    airportName = 'Stockholm Airport';
   }
 
   if (selectedAirport === 'dus') {
     airportName = 'Düsseldorf Airport';
   }
 
-  if (selectedAirport === 'arn') {
-    airportName = 'Stockholm Airport';
+    if (selectedAirport === 'muc') {
+    airportName = 'Munich Airport';
+  }
+
+    if (selectedAirport === 'lhr') {
+    airportName = 'London Heathrow Airport';
   }
 
   if (selectedAirport === 'ams') {
@@ -152,6 +160,8 @@ function App() {
               <Dropdown.Item eventKey="osl">🇳🇴 Oslo Gardermoen Airport</Dropdown.Item>
               <Dropdown.Item eventKey="arn">🇸🇪 Stockholm Arlanda Airport</Dropdown.Item>
               <Dropdown.Item eventKey="dus">🇩🇪 Düsseldorf International Airport</Dropdown.Item>
+              <Dropdown.Item eventKey="muc">🇩🇪 Münich Airport</Dropdown.Item>
+              <Dropdown.Item eventKey="lhr">🇬🇧 London Heathrow Airport</Dropdown.Item>
               <Dropdown.Item eventKey="ams">🇳🇱 Amsterdam Schipol Airport</Dropdown.Item>
               <Dropdown.Item eventKey="dub">🇮🇪 Dublin Airport</Dropdown.Item>
             </DropdownButton>

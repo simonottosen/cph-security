@@ -123,6 +123,38 @@ def firebase_write(airport):
     
     return firebase_write_status
 
+def munich():
+    airport = "MUC"
+    airport_api = "https://www.passngr.de/info/generic/data/QueueWaitingTimeEDDM_en.json"
+    
+    # Use requests module to send a GET request to the airport API and retrieve waiting time information as JSON
+    response = requests.get(airport_api)
+    waitingtime = json.loads(response.text)
+    
+    for datas in waitingtime["queueTimes"]["current"]:
+        if datas["queueId"] == "T2_Abflug_SIKO":
+            numbers = datas["projectedWaitTime"]
+            if numbers < 0 or numbers == 0.0:
+                numbers = numbers = 0
+            numbers = round(numbers)
+            if isinstance(numbers, int):
+                queue = numbers   # Assign a value to queue
+            else:
+                print("Error: Information not found in the JSON data.")
+    
+    # Get current UTC datetime and format as string
+    now_utc = datetime.utcnow()
+    timestamp = now_utc.strftime('%Y-%m-%dT%H:%M:%S')
+    
+    # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
+    database_write_status = database_write(queue, timestamp, airport)
+    firebase_write_status = firebase_write(airport)
+    supabase_write_status = supabase_write(queue, timestamp, airport)
+    healthcheck_perform_status = healthcheck_perform(healthcheck)
+    
+    # Print a completion message with the status results from the three previous function calls
+    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Supabase: "+str(supabase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+
 def heathrow():
     airport = "LHR"
     airport_api = "https://api-dp-prod.dp.heathrow.com/pihub/securitywaittime/ByTerminal/2"

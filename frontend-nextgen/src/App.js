@@ -100,6 +100,10 @@ function App() {
   if (selectedAirport === 'dus') {
     airportName = 'Düsseldorf Airport';
   }
+  
+    if (selectedAirport === 'fra') {
+    airportName = 'Frankfurt Airport';
+  }
 
     if (selectedAirport === 'muc') {
     airportName = 'Munich Airport';
@@ -160,6 +164,7 @@ function App() {
               <Dropdown.Item eventKey="osl">🇳🇴 Oslo Gardermoen Airport</Dropdown.Item>
               <Dropdown.Item eventKey="arn">🇸🇪 Stockholm Arlanda Airport</Dropdown.Item>
               <Dropdown.Item eventKey="dus">🇩🇪 Düsseldorf International Airport</Dropdown.Item>
+              <Dropdown.Item eventKey="fra">🇩🇪 Frankfurt Airport</Dropdown.Item>
               <Dropdown.Item eventKey="muc">🇩🇪 Münich Airport</Dropdown.Item>
               <Dropdown.Item eventKey="lhr">🇬🇧 London Heathrow Airport</Dropdown.Item>
               <Dropdown.Item eventKey="ams">🇳🇱 Amsterdam Schipol Airport</Dropdown.Item>

@@ -13,7 +13,7 @@ setup(
                 "arn-fetch=app.app:arlanda",
                 "osl-fetch=app.app:oslo",
                 "ams-fetch=app.app:amsterdam",
-                #"ber-fetch=app.app:berlin",
+                "lhr-fetch=app.app:heathrow",
                 "dub-fetch=app.app:dublin"
             ]
         }

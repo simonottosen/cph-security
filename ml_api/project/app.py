@@ -74,7 +74,7 @@ def get_data():
     df_test = pd.concat([df, df_airport], axis=1)
     df = df_test
     df = df.drop(columns=['airport'])
-    for airport_code in ['AMS', 'ARN', 'CPH', 'DUB', 'DUS', 'FRA', 'OSL']:
+    for airport_code in ['AMS', 'ARN', 'CPH', 'DUB', 'DUS', 'FRA', 'OSL', 'MUC', 'IST', 'LHR']:
         airport_data = df[df[airport_code] == 1]
         
         yesterday = now - timedelta(days=1)
@@ -112,7 +112,7 @@ def get_data_light():
     This function fetches the external dataset from API endpoint.
     '''
     now = datetime.now()
-    newmodeldata_url = (str(CPHAPI_HOST) + str("?select=id,queue,timestamp,airport&order=id.desc&limit=20000"))
+    newmodeldata_url = (str(CPHAPI_HOST) + str("?select=id,queue,timestamp,airport&airport=not.eq.BER&order=id.desc&limit=20000"))
     dataframe = pd.read_json(newmodeldata_url)
     print("Loaded light dataset successfully in %.2f seconds " % (time.time() - start_time_load_data))
     StartTime = dataframe["timestamp"]
@@ -131,7 +131,7 @@ def get_data_light():
     df_test = pd.concat([df, df_airport], axis=1)
     df = df_test
     df = df.drop(columns=['airport'])
-    for airport_code in ['AMS', 'ARN', 'CPH', 'DUB', 'DUS', 'FRA', 'OSL']:
+    for airport_code in ['AMS', 'ARN', 'CPH', 'DUB', 'DUS', 'FRA', 'OSL', 'MUC', 'IST', 'LHR']:
         airport_data = df[df[airport_code] == 1]
         
         yesterday = now - timedelta(days=1)
@@ -222,17 +222,20 @@ def predict_queue(timestamp):
     timestamp['weekday'] = timestamp.index.weekday
 
     airport_dict = {
-        "AMS": [1, 0, 0, 0, 0, 0, 0],
-        "ARN": [0, 1, 0, 0, 0, 0, 0],
-        "CPH": [0, 0, 1, 0, 0, 0, 0],
-        "DUB": [0, 0, 0, 1, 0, 0, 0],
-        "DUS": [0, 0, 0, 0, 1, 0, 0],
-        "FRA": [0, 0, 0, 0, 0, 1, 0],
-        "OSL": [0, 0, 0, 0, 0, 0, 1]
+        "AMS": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "ARN": [0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+        "CPH": [0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+        "DUB": [0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+        "DUS": [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+        "FRA": [0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
+        "OSL": [0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+        "MUC": [0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+        "IST": [0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
+        "LHR": [0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
     }
 
     if airport in airport_dict:
-        timestamp[['AMS', 'ARN', 'CPH', 'DUB', 'DUS', 'FRA', 'OSL']] = airport_dict[airport]
+        timestamp[['AMS', 'ARN', 'CPH', 'DUB', 'DUS', 'FRA', 'OSL', 'MUC', 'IST', 'LHR']] = airport_dict[airport]
     
     df = get_data_light()    
     # Create a new column "date" by concatenating year, month, day, and hour
@@ -267,7 +270,7 @@ def make_prediction():
     print("Received request to predict queue")
     input_date_str = request.args.get('timestamp')
     airport_code = request.args.get('airport')
-    valid_airports = ['ARN', 'CPH', 'DUS', 'FRA', 'OSL', 'AMS', 'DUB']
+    valid_airports = ['AMS', 'ARN', 'CPH', 'DUB', 'DUS', 'FRA', 'OSL', 'MUC', 'IST', 'LHR']
     
     if not input_date_str and not airport_code:
         return jsonify({'error': 'Missing "airport" and "timestamp" parameters. Usage: /predict?airport=ARN&timestamp=YYYY-MM-DDTHH:MM'}), 400

@@ -74,7 +74,7 @@ def get_data():
     df_test = pd.concat([df, df_airport], axis=1)
     df = df_test
     df = df.drop(columns=['airport'])
-    for airport_code in ['AMS', 'ARN', 'CPH', 'DUB', 'DUS', 'FRA', 'OSL', 'MUC', 'IST', 'LHR']:
+    for airport_code in ['AMS', 'ARN', 'CPH', 'DUB', 'DUS', 'FRA', 'IST', 'LHR', 'MUC', 'OSL']:
         airport_data = df[df[airport_code] == 1]
         
         yesterday = now - timedelta(days=1)
@@ -131,7 +131,7 @@ def get_data_light():
     df_test = pd.concat([df, df_airport], axis=1)
     df = df_test
     df = df.drop(columns=['airport'])
-    for airport_code in ['AMS', 'ARN', 'CPH', 'DUB', 'DUS', 'FRA', 'OSL', 'MUC', 'IST', 'LHR']:
+    for airport_code in ['AMS', 'ARN', 'CPH', 'DUB', 'DUS', 'FRA', 'IST', 'LHR', 'MUC', 'OSL']:
         airport_data = df[df[airport_code] == 1]
         
         yesterday = now - timedelta(days=1)
@@ -228,14 +228,14 @@ def predict_queue(timestamp):
         "DUB": [0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
         "DUS": [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
         "FRA": [0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
-        "OSL": [0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-        "MUC": [0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
-        "IST": [0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
-        "LHR": [0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+        "IST": [0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+        "LHR": [0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+        "MUC": [0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
+        "OSL": [0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
     }
 
     if airport in airport_dict:
-        timestamp[['AMS', 'ARN', 'CPH', 'DUB', 'DUS', 'FRA', 'OSL', 'MUC', 'IST', 'LHR']] = airport_dict[airport]
+        timestamp[['AMS', 'ARN', 'CPH', 'DUB', 'DUS', 'FRA', 'IST', 'LHR', 'MUC', 'OSL']] = airport_dict[airport]
     
     df = get_data_light()    
     # Create a new column "date" by concatenating year, month, day, and hour
@@ -270,7 +270,7 @@ def make_prediction():
     print("Received request to predict queue")
     input_date_str = request.args.get('timestamp')
     airport_code = request.args.get('airport')
-    valid_airports = ['AMS', 'ARN', 'CPH', 'DUB', 'DUS', 'FRA', 'OSL', 'MUC', 'IST', 'LHR']
+    valid_airports = ['AMS', 'ARN', 'CPH', 'DUB', 'DUS', 'FRA', 'IST', 'LHR', 'MUC', 'OSL']
     
     if not input_date_str and not airport_code:
         return jsonify({'error': 'Missing "airport" and "timestamp" parameters. Usage: /predict?airport=ARN&timestamp=YYYY-MM-DDTHH:MM'}), 400

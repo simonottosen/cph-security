@@ -1,5 +1,5 @@
 # Will also need standalone Selenium Container - docker run -d -p 4444:4444 -p 7900:7900 --shm-size="2g" selenium/standalone-firefox:4.8.1-20230306
-FROM python:3.8.18
+FROM python:3.13.0b3
 RUN groupadd --gid 1000 user && \
     useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash user
 RUN mkdir /home/user/app

@@ -300,7 +300,7 @@ def copenhagen():
     # Define initial values
     healthcheck = os.environ.get("CPH_HEALTHCHECK") 
     airport = "CPH"
-    airport_api = "https://cph-flightinfo-prod.azurewebsites.net//api/v1/waiting/get?type=ventetid"
+    airport_api = "https://cphwaitingtime.z6.web.core.windows.net/waitingtime.json"
     
     # Use requests module to send a GET request to the airport API and retrieve waiting time information as JSON
     response = requests.get(airport_api)

@@ -8,6 +8,9 @@ from firebase_admin import credentials
 from firebase_admin import firestore
 import re
 from supabase import create_client, Client
+import gzip
+import io
+import http.client
 
 
 # This function performs a healthcheck.
@@ -189,14 +192,22 @@ def istanbul():
 
 def heathrow():
     airport = "LHR"
-    airport_api = "https://api-dp-prod.dp.heathrow.com/pihub/securitywaittime/ByTerminal/2"
-    headers = {"origin": "https://www.heathrow.com"}
+    conn = http.client.HTTPSConnection("api-dp-prod.dp.heathrow.com")
+    payload = ''
+    headers = {
+      'Origin': 'https://www.heathrow.com'
+    }
+    conn.request("GET", "/pihub/securitywaittime/ByTerminal/2?=null", payload, headers)
+    res = conn.getresponse()
+    data = res.read()
     
-    # Use requests module to send a GET request to the airport API and retrieve waiting time information as JSON
-    response = requests.get(airport_api, headers=headers)
-    waitingtime = json.loads(response.text)
+    with gzip.GzipFile(fileobj=io.BytesIO(data)) as f:
+        decompressed_data = f.read()
     
-    # Loop through data in the waiting time JSON until you find the relevant security checkpoint waiting time
+    # Print the decompressed data
+    response = (decompressed_data.decode('utf-8'))  # Assuming the decompressed data is a UTF-8 encoded string
+    
+    waitingtime = json.loads(response)
     for entry in waitingtime:
         for measurement in entry['queueMeasurements']:
             if measurement['name'] == 'maximumWaitTime':

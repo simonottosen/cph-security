@@ -18,7 +18,7 @@ from sklearn.model_selection import train_test_split
 if os.environ.get("CPHAPI_HOST"):
     CPHAPI_HOST = os.environ.get("CPHAPI_HOST")
 else:
-    CPHAPI_HOST = "cph_postgrest:3000/waitingtime"
+    CPHAPI_HOST = "https://waitport.com/api/v1/all"
 
 
 
@@ -55,7 +55,7 @@ def get_data():
     This function fetches the external dataset from API endpoint.
     '''
     now = datetime.now()
-    newmodeldata_url = (str(CPHAPI_HOST) + str("?select=id,queue,timestamp,airport&airport=not.eq.BER"))
+    newmodeldata_url = (str(CPHAPI_HOST) + str("?order=id.desc&limit=100000&select=id,queue,timestamp,airport&airport=not.eq.BER"))
     dataframe = pd.read_json(newmodeldata_url)
     print("Loaded data successfully in %.2f seconds " % (time.time() - start_time_load_data))
     StartTime = dataframe["timestamp"]

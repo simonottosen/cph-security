@@ -127,6 +127,7 @@ def firebase_write(airport):
     return firebase_write_status
 
 def munich():
+    healthcheck = os.environ.get("MUC_HEALTHCHECK") 
     airport = "MUC"
     airport_api = "https://www.passngr.de/info/generic/data/QueueWaitingTimeEDDM_en.json"
     
@@ -161,6 +162,7 @@ def munich():
 
 
 def istanbul():
+    healthcheck = os.environ.get("IST_HEALTHCHECK") 
     airport = "IST"
     airport_api = "https://www.istairport.com/umbraco/api/Checkpoint/GetWaitingTimes"
     headers = {"Referer": "https://www.istairport.com/en/?locale=en"}
@@ -191,6 +193,7 @@ def istanbul():
 
 
 def heathrow():
+    healthcheck = os.environ.get("LHR_HEALTHCHECK") 
     airport = "LHR"
     conn = http.client.HTTPSConnection("api-dp-prod.dp.heathrow.com")
     payload = ''

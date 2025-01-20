@@ -18,7 +18,7 @@ from sklearn.model_selection import train_test_split
 if os.environ.get("CPHAPI_HOST"):
     CPHAPI_HOST = os.environ.get("CPHAPI_HOST")
 else:
-    CPHAPI_HOST = "https://waitport.com/api/v1/all"
+    CPHAPI_HOST = "cph_postgrest:3000/waitingtime"
 
 
 

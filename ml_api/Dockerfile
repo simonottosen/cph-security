@@ -1,5 +1,5 @@
 # Pull base image
-FROM python:3.8
+FROM python:3.14.0a2
 ENV PYTHONUNBUFFERED 1
 ENV PYTHONDONTWRITEBYTECODE 1
 # Set environment varibles

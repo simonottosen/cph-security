@@ -7,8 +7,10 @@
     <meta name="theme-color" content="#000000" />
     <meta
       name="description"
-      content="Waitport is a tool that enables you to view the current waiting time in the security at various airports"
+      content="Waitport: Find real-time airport security wait times and predict future queue lengths. Get accurate estimates for your travel plans."
     />
+    <meta name="keywords" content="airport, security, wait time, queue, estimate, prediction, travel, time, delay" />
+    <meta name="robots" content="index, follow" />
     <link rel="apple-touch-icon"  href="https://fmj.asrvd.me/🛫" />
     <!--
       manifest.json provides metadata used when your web app is installed on a
@@ -24,7 +26,21 @@
       work correctly both with client-side routing and a non-root public URL.
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
-    <title>Waitport - Airport queue</title>
+    <title>Airport Security Wait Times & Queue Prediction | Waitport</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Waitport",
+        "url": "https://waitport.com",
+        "description": "Find real-time airport security wait times and predict future queue lengths. Get accurate estimates for your travel plans.",
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": "https://waitport.com/?q={search_term_string}",
+          "query-input": "required name=search_term_string"
+        }
+      }
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

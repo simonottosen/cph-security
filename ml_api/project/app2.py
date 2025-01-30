@@ -14,8 +14,9 @@ from sklearn.metrics import mean_squared_error
 import xgboost as xgb
 from supabase import create_client, Client
 from dotenv import load_dotenv
-load_dotenv()
+from sklearn.base import BaseEstimator, RegressorMixin
 
+load_dotenv()
 
 # ------------------------------------------------------------------------------
 # Logging Setup
@@ -37,7 +38,27 @@ dk_holidays = holidays.Denmark()
 # Valid airports for reference
 VALID_AIRPORTS = ['AMS', 'ARN', 'CPH', 'DUB', 'DUS', 'FRA', 'IST', 'LHR', 'MUC', 'OSL']
 
+# ------------------------------------------------------------------------------
+# A Fallback Regressor that Always Returns 5
+# ------------------------------------------------------------------------------
+class FallbackRegressor(BaseEstimator, RegressorMixin):
+    """A fallback regressor that always returns 5."""
+    def __init__(self, constant=5):
+        self.constant = constant
+
+    def fit(self, X, y=None):
+        return self  # No actual fitting
+
+    def predict(self, X):
+        return np.full(shape=(len(X),), fill_value=self.constant)
+
+# ------------------------------------------------------------------------------
+# Utility: Get Data from Supabase
+# ------------------------------------------------------------------------------
 def get_data_via_supabase_client(limit=100000) -> pd.DataFrame:
+    """
+    Fetch data from Supabase. Adjust table/columns/filters as needed.
+    """
     supabase_url = os.environ.get("SUPABASE_URL", "")
     supabase_key = os.environ.get("SUPABASE_KEY", "")
     if not supabase_url or not supabase_key:
@@ -45,20 +66,18 @@ def get_data_via_supabase_client(limit=100000) -> pd.DataFrame:
     
     supabase: Client = create_client(supabase_url, supabase_key)
     
-    # For example, query the 'all' table and exclude 'BER' in 'airport'
-    # Adjust table name, column names, or filters as needed
     response = (
         supabase
         .table("waitingtime")
         .select("id,queue,timestamp,airport")
-        .neq("airport", "BER")
+        .neq("airport", "BER")  # Exclude BER
         .order("id", desc=True)
         .limit(limit)
         .execute()
     )
-    # response.data is a list of dicts
     df = pd.DataFrame(response.data)
     return df
+
 # ------------------------------------------------------------------------------
 # Flask App Setup
 # ------------------------------------------------------------------------------
@@ -69,20 +88,18 @@ crontab = Crontab(app)
 # ------------------------------------------------------------------------------
 # Utility Functions
 # ------------------------------------------------------------------------------
-
 def add_holiday_feature(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Add a 'Holiday' feature (1/0) indicating if a day is a holiday in Denmark.
+    Add a 'Holiday' feature (1/0) indicating if a day is a holiday in Denmark,
+    without flattening the index to midnight.
     """
-    # Convert the DataFrame index to daily resolution to match with holidays
-    df.index = pd.to_datetime(df.index.date)
-    df['Holiday'] = df.index.map(lambda x: int(x in dk_holidays))
+    df['Holiday'] = df.index.to_series().apply(lambda dt: int(dt.date() in dk_holidays))
     return df
 
 def _compute_rolling_averages(df: pd.DataFrame, airport_code: str, now: datetime) -> None:
     """
-    For a given airport_code, compute the 'yesterday_average_queue' and 
-    'lastweek_average_queue' for the entire df in-place. If either is NaN, default to 0. 
+    For a given airport_code, compute 'yesterday_average_queue' and 'lastweek_average_queue'.
+    Assign them as single values for all rows of that airport. If no data, default to 0.
     """
     airport_data = df[df[airport_code] == 1]
     
@@ -96,11 +113,11 @@ def _compute_rolling_averages(df: pd.DataFrame, airport_code: str, now: datetime
     )
     yest_avg = airport_data[mask_yesterday]['queue'].mean()
     if pd.isna(yest_avg):
-        yest_avg = 0  # default to 0 if no data
+        yest_avg = 0  # fallback
+    
     df.loc[df[airport_code] == 1, 'yesterday_average_queue'] = yest_avg
 
-    # LAST WEEK AVERAGE
-    # We'll do a 7-day window from 'now' minus 7 days, only for hours 7-22
+    # LAST WEEK AVERAGE (rolling 7 days, hours 7-22)
     week_ago = now - pd.Timedelta(days=7)
     mask_week = (
         (df.index >= week_ago) & 
@@ -108,7 +125,7 @@ def _compute_rolling_averages(df: pd.DataFrame, airport_code: str, now: datetime
         (df['hour'] >= 7) & (df['hour'] <= 22) &
         (df[airport_code] == 1)
     )
-    # Compute rolling(24) on queue if possible
+    # Attempt a rolling(24) on queue
     rolling_series = df[mask_week]['queue'].reset_index(drop=True).rolling(24).mean()
     if len(rolling_series) == 0:
         lastweek_avg = 0
@@ -116,11 +133,12 @@ def _compute_rolling_averages(df: pd.DataFrame, airport_code: str, now: datetime
         lastweek_avg = rolling_series.iloc[-1]
         if pd.isna(lastweek_avg):
             lastweek_avg = 0
+    
     df.loc[df[airport_code] == 1, 'lastweek_average_queue'] = lastweek_avg
 
 def fetch_data(url: str) -> pd.DataFrame:
     """
-    Common function for reading data from the API into a DataFrame.
+    Common function for reading JSON from a given URL into a DataFrame.
     """
     return pd.read_json(url)
 
@@ -130,30 +148,28 @@ def fetch_data(url: str) -> pd.DataFrame:
 @cache.memoize()
 def get_data():
     """
-    Fetch large dataset from API and preprocess.
+    Fetch large dataset from Supabase (or API) and preprocess.
     """
     start_time = time.time()
     logger.info("Fetching full dataset...")
 
     now = datetime.now()
-    #newmodeldata_url = f"{CPHAPI_HOST}?order=id.desc&limit=100000&select=id,queue,timestamp,airport&airport=not.eq.BER"
+
     try:
-       # dataframe = fetch_data(newmodeldata_url)
         dataframe = get_data_via_supabase_client(limit=100000)
     except Exception as e:
         logger.error(f"Error fetching data: {e}")
-        return pd.DataFrame()  # Return empty df on error
+        return pd.DataFrame()  # Return empty DF on error
 
-    # Convert timestamp to local naive datetime, then add 2 hours offset
+    # Convert timestamp to naive local (offset +2 hours)
     StartTime = pd.to_datetime(dataframe["timestamp"])
     StartTime = StartTime.apply(lambda t: t.replace(tzinfo=None))
     StartTime = StartTime + pd.DateOffset(hours=2)
     dataframe["timestamp"] = StartTime
     
-    # Set index, drop raw timestamp column
-    df = dataframe.set_index(dataframe.timestamp)
-    df.drop('timestamp', axis=1, inplace=True)
-
+    # Set index
+    df = dataframe.set_index("timestamp")
+    
     # Add date/time features
     df['year'] = df.index.year
     df['hour'] = df.index.hour
@@ -173,69 +189,57 @@ def get_data():
     # Holiday feature
     df = add_holiday_feature(df)
 
-    # Remove 'id' since it's not useful
+    # Remove 'id' if present
     if 'id' in df.columns:
         df.drop(['id'], axis=1, inplace=True)
     
-    # Clip or remove extremely large values in queue
-    # E.g., set to NaN if above 1e10, then drop them
+    # Clip extremely large queue values
     df['queue'] = df['queue'].apply(lambda x: np.nan if x > 1e10 else x)
     df.dropna(subset=['queue'], inplace=True)
 
     logger.info("Fetched and preprocessed full dataset in %.2f seconds", time.time() - start_time)
     return df
 
-
 @cache.memoize()
 def get_data_light():
     """
-    Fetch smaller (light) dataset from API for quick usage in predictions.
+    Fetch a smaller dataset. Same transformations as get_data().
     """
     start_time = time.time()
     logger.info("Fetching light dataset...")
 
     now = datetime.now()
-    newmodeldata_url = f"{CPHAPI_HOST}?select=id,queue,timestamp,airport&airport=not.eq.BER&order=id.desc&limit=20000"
     try:
-        dataframe = get_data_via_supabase_client(limit=100000)
+        dataframe = get_data_via_supabase_client(limit=20000)
     except Exception as e:
         logger.error(f"Error fetching data: {e}")
-        return pd.DataFrame()  # Return empty df on error
+        return pd.DataFrame()  # Return empty DF on error
 
-    # Convert timestamp to local naive datetime, then add 2 hours offset
     StartTime = pd.to_datetime(dataframe["timestamp"])
     StartTime = StartTime.apply(lambda t: t.replace(tzinfo=None))
     StartTime = StartTime + pd.DateOffset(hours=2)
     dataframe["timestamp"] = StartTime
     
-    # Set index, drop raw timestamp column
-    df = dataframe.set_index(dataframe.timestamp)
-    df.drop('timestamp', axis=1, inplace=True)
-
-    # Add date/time features
+    df = dataframe.set_index("timestamp")
+    
     df['year'] = df.index.year
     df['hour'] = df.index.hour
     df['day'] = df.index.day
     df['month'] = df.index.month
     df['weekday'] = df.index.weekday
 
-    # One-hot encode airport
     df_airport = pd.get_dummies(df['airport'])
     df = pd.concat([df, df_airport], axis=1).drop(columns=['airport'])
 
-    # Compute rolling averages for each known airport
     for airport_code in VALID_AIRPORTS:
         if airport_code in df.columns:
             _compute_rolling_averages(df, airport_code, now)
 
-    # Holiday feature
     df = add_holiday_feature(df)
 
-    # Remove 'id' since it's not useful
     if 'id' in df.columns:
         df.drop(['id'], axis=1, inplace=True)
 
-    # Clip or remove extremely large values in queue
     df['queue'] = df['queue'].apply(lambda x: np.nan if x > 1e10 else x)
     df.dropna(subset=['queue'], inplace=True)
 
@@ -243,110 +247,129 @@ def get_data_light():
     return df
 
 # ------------------------------------------------------------------------------
-# Model Training & Loading
+# Separate Model Training
 # ------------------------------------------------------------------------------
-
-def train_model():
+def train_models():
     """
-    Train an XGBoost model on the full dataset using a time-series split.
-    Saves the model to 'trained_model.joblib'.
+    Train a separate XGBoost model for each airport in VALID_AIRPORTS.
+    If no data or training fails for an airport, store a FallbackRegressor that returns 5.
     """
     start_time = time.time()
-    logger.info("Starting model training...")
+    logger.info("Starting model training for each airport...")
 
-    df = get_data()
+    df = get_data()  # full dataset
     if df.empty:
-        logger.error("No data returned for training. Training aborted.")
-        return None
+        logger.warning("No data returned at all. Saving fallback models for all airports.")
+        for ap in VALID_AIRPORTS:
+            fallback = FallbackRegressor(constant=5)
+            joblib.dump(fallback, f'trained_model_{ap}.joblib')
+        return
 
-    # Ensure df is sorted by index (time)
-    df_sorted = df.sort_index()
-    # Time-based split: first 80% as train, last 20% as test
-    cutoff = int(len(df_sorted) * 0.8)
-    train_df = df_sorted.iloc[:cutoff]
-    test_df  = df_sorted.iloc[cutoff:]
+    # Sort by index (time)
+    df.sort_index(inplace=True)
 
-    X_train = train_df.drop('queue', axis=1)
-    y_train = train_df['queue']
-    X_test  = test_df.drop('queue', axis=1)
-    y_test  = test_df['queue']
+    for airport_code in VALID_AIRPORTS:
+        if airport_code not in df.columns:
+            logger.warning(f"No column for {airport_code}. Saving fallback model.")
+            fallback = FallbackRegressor()
+            joblib.dump(fallback, f'trained_model_{airport_code}.joblib')
+            continue
 
-    # Define the model
-    model = xgb.XGBRegressor(objective='reg:squarederror', random_state=7)
+        airport_df = df[df[airport_code] == 1]
+        if airport_df.empty:
+            logger.warning(f"No data for airport {airport_code}, saving fallback.")
+            fallback = FallbackRegressor()
+            joblib.dump(fallback, f'trained_model_{airport_code}.joblib')
+            continue
 
-    # Fit the model
-    model.fit(X_train, y_train)
+        cutoff = int(len(airport_df) * 0.8)
+        train_df = airport_df.iloc[:cutoff]
+        test_df  = airport_df.iloc[cutoff:]
 
-    # Evaluate quickly on holdout set
-    y_pred = model.predict(X_test)
-    mse = mean_squared_error(y_test, y_pred)
-    logger.info(f"Holdout set MSE: {mse:.2f}")
+        if len(train_df) < 10:  # or any minimum you want
+            logger.warning(f"Not enough training rows ({len(train_df)}) for {airport_code}, using fallback.")
+            fallback = FallbackRegressor()
+            joblib.dump(fallback, f'trained_model_{airport_code}.joblib')
+            continue
 
-    # Save trained model
-    joblib.dump(model, 'trained_model.joblib')
-    logger.info("Model trained and saved to 'trained_model.joblib' in %.2f seconds", time.time() - start_time)
-    return model
+        try:
+            X_train = train_df.drop('queue', axis=1)
+            y_train = train_df['queue']
+            X_test  = test_df.drop('queue', axis=1)
+            y_test  = test_df['queue']
 
-def load_model():
+            model = xgb.XGBRegressor(
+                objective='reg:squarederror',
+                random_state=7
+            )
+            model.fit(X_train, y_train)
+
+            # Evaluate quickly
+            if not X_test.empty:
+                y_pred = model.predict(X_test)
+                mse = mean_squared_error(y_test, y_pred)
+                logger.info(f"{airport_code} - Holdout set MSE: {mse:.2f}")
+
+            joblib.dump(model, f'trained_model_{airport_code}.joblib')
+            logger.info(f"Model for {airport_code} saved.")
+        except Exception as e:
+            logger.error(f"Error training {airport_code}, using fallback. Error: {e}")
+            fallback = FallbackRegressor()
+            joblib.dump(fallback, f'trained_model_{airport_code}.joblib')
+
+    logger.info("Finished training separate models in %.2f seconds", time.time() - start_time)
+
+def load_model_for_airport(airport_code: str):
     """
-    Load model from joblib file. Return None if file not found or load error.
+    Load model from 'trained_model_{airport_code}.joblib'.
+    If file not found or an error occurs, return FallbackRegressor (always returns 5).
     """
     try:
-        model = joblib.load('trained_model.joblib')
-        logger.info("Loaded model from 'trained_model.joblib'.")
+        model = joblib.load(f"trained_model_{airport_code}.joblib")
+        logger.info(f"Loaded model for {airport_code}.")
         return model
-    except FileNotFoundError:
-        logger.error("Model file 'trained_model.joblib' not found.")
-        return None
     except Exception as e:
-        logger.error(f"Error loading model: {e}")
-        return None
+        logger.error(f"Could not load model for {airport_code}, using fallback. Error: {e}")
+        return FallbackRegressor(constant=5)
 
 # ------------------------------------------------------------------------------
 # Prediction Logic
 # ------------------------------------------------------------------------------
-
 def predict_queue(timestamp_df: pd.DataFrame) -> float:
     """
-    Given a DataFrame with columns ['timestamp', 'airport'] (single row),
-    generate a queue length prediction using the trained XGBoost model.
+    Given a single-row DataFrame with columns ['timestamp', 'airport'],
+    return a queue length prediction. If no model or data, returns fallback (5).
     """
-    # Load or reload the model
-    model = load_model()
-    if model is None:
-        # Indicate to caller that model is not available
-        return None
-
-    # Extract row data
     airport = timestamp_df["airport"].iloc[0]
+    model = load_model_for_airport(airport)
+
+    # Convert timestamp
     modeldatetime = pd.to_datetime(timestamp_df["timestamp"])
     timestamp_df["timestamp"] = modeldatetime
     timestamp_df = timestamp_df.set_index(timestamp_df.timestamp)
 
-    # Add time features
+    # Add date/time features
     timestamp_df['year'] = timestamp_df.index.year
     timestamp_df['hour'] = timestamp_df.index.hour
     timestamp_df['day'] = timestamp_df.index.day
     timestamp_df['month'] = timestamp_df.index.month
     timestamp_df['weekday'] = timestamp_df.index.weekday
 
-    # One-hot columns for airport
+    # One-hot for all valid airports
     for ap in VALID_AIRPORTS:
         timestamp_df[ap] = 1 if ap == airport else 0
 
-    # For yesterday/lastweek columns, we take them from the newest row in the light DF
+    # Get yesterday/lastweek averages from the light DF
     df_light = get_data_light()
     if df_light.empty:
-        # If we cannot retrieve any data, set them to 0 as fallback
+        # Fallback to 0
         timestamp_df['yesterday_average_queue'] = 0
         timestamp_df['lastweek_average_queue'] = 0
     else:
-        # Sort by date
+        # Sort for newest row
         df_light["date"] = pd.to_datetime(df_light[["year", "month", "day", "hour"]])
         df_sorted = df_light.sort_values("date", ascending=False)
-
-        # Attempt to find the newest row for our target airport
-        # If none found, default to 0
+        # Filter for this airport
         newest_rows = df_sorted[df_sorted[airport] == 1]
         if newest_rows.empty:
             yest_avg = 0
@@ -355,7 +378,7 @@ def predict_queue(timestamp_df: pd.DataFrame) -> float:
             newest_row = newest_rows.iloc[0]
             yest_avg = newest_row.get("yesterday_average_queue", 0)
             lastweek_avg = newest_row.get("lastweek_average_queue", 0)
-            if pd.isna(yest_avg): 
+            if pd.isna(yest_avg):
                 yest_avg = 0
             if pd.isna(lastweek_avg):
                 lastweek_avg = 0
@@ -363,21 +386,17 @@ def predict_queue(timestamp_df: pd.DataFrame) -> float:
         timestamp_df['yesterday_average_queue'] = yest_avg
         timestamp_df['lastweek_average_queue'] = lastweek_avg
 
-    # Add holiday feature
     timestamp_df = add_holiday_feature(timestamp_df)
 
-    # Drop extraneous columns for model input
-    if 'timestamp' in timestamp_df.columns:
-        timestamp_df.drop('timestamp', axis=1, inplace=True)
-    if 'airport' in timestamp_df.columns:
-        timestamp_df.drop('airport', axis=1, inplace=True)
-    if 'date' in timestamp_df.columns:
-        timestamp_df.drop('date', axis=1, inplace=True)
+    # Clean up columns not used by model
+    drop_cols = ['timestamp', 'airport', 'date']
+    for c in drop_cols:
+        if c in timestamp_df.columns:
+            timestamp_df.drop(c, axis=1, inplace=True)
 
     # Predict
     prediction = model.predict(timestamp_df)
-    # Possibly offset the prediction (why +1? domain knowledge or correction)
-    # Then round
+    # If you strictly want the fallback=5 as final, consider removing this +1 offset
     prediction = prediction + 1
     return round(prediction[0])
 
@@ -409,20 +428,13 @@ def make_prediction():
     if airport_code not in VALID_AIRPORTS:
         return jsonify({'error': f'Invalid airport code "{airport_code}". Valid codes are {",".join(VALID_AIRPORTS)}.'}), 400
 
-    # Validate timestamp
     try:
         input_date = pd.to_datetime(input_date_str)
     except (ValueError, TypeError):
         return jsonify({'error': 'Invalid "timestamp" format. Expected YYYY-MM-DDTHH:MM'}), 400
 
-    # Prepare input
     input_data = pd.DataFrame({'timestamp': [input_date], 'airport': [airport_code]})
-
-    # Call prediction
     predicted = predict_queue(input_data)
-    if predicted is None:
-        # Means model wasn't loaded properly
-        return jsonify({'error': 'Model not available. Please try again later.'}), 500
 
     response = {'predicted_queue_length_minutes': predicted}
     logger.info("Prediction completed in %.2f seconds", time.time() - start_time)
@@ -436,22 +448,21 @@ def scheduled_training():
     """
     Daily re-training (midnight). Customize as needed.
     """
-    logger.info(f'Crontab triggered: retraining model at {datetime.now()}')
-    train_model()
+    logger.info(f'Crontab triggered: retraining models at {datetime.now()}')
+    train_models()
 
 # ------------------------------------------------------------------------------
-# On Startup: Train once (optional) or just load
+# On Startup: Train once (optional)
 # ------------------------------------------------------------------------------
 with app.app_context():
     logger.info("Initializing application...")
-    # Optional: Train the model once on startup
-    # If you prefer not to train on every startup, comment this out:
-    train_model()
+    # Train all models once on startup
+    train_models()
 
 # ------------------------------------------------------------------------------
 # Main
 # ------------------------------------------------------------------------------
 if __name__ == '__main__':
-    # In production, use a WSGI server like gunicorn or uwsgi, e.g.:
-    #   gunicorn -w 2 -b 0.0.0.0:5000 your_script:app
+    # In production, you'd typically use gunicorn or uwsgi, e.g.:
+    #   gunicorn -w 2 -b 0.0.0.0:5000 app2:app
     app.run(debug=False, host='0.0.0.0')

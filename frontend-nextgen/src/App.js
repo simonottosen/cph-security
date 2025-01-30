@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { Helmet } from "react-helmet";
 import DateTime from "react-datetime";
 import "react-datetime/css/react-datetime.css";
 import Container from "react-bootstrap/Container";
@@ -19,6 +20,7 @@ function App() {
   const [selectedDateTime, setSelectedDateTime] = useState(new Date());
   const [predictedQueueLength, setPredictedQueueLength] = useState(null);
 
+  // Update the document title when the component mounts
   useEffect(() => {
     document.title = 'Waitport - Airport Security Queue';
   }, []);
@@ -31,6 +33,7 @@ function App() {
     setSelectedDateTime(moment.toDate());
   };
 
+  // Fetch the most recent queue information
   useEffect(() => {
     const fetchQueueInformation = async () => {
       try {
@@ -45,15 +48,17 @@ function App() {
     fetchQueueInformation();
   }, [selectedAirport]);
 
-
+  // Fetch the average queue information over the last 24 entries (approx. 2 hours if updated every 5 min)
   useEffect(() => {
     const fetchQueueAverageInformation = async () => {
       try {
         const response = await axios.get(
           `https://waitport.com/api/v1/all?airport=eq.${selectedAirport.toUpperCase()}&select=queue&limit=24&order=id.desc`
         );
-        const queueValues = response.data.map(data => data.queue);
-        const averageQueue = Math.round(queueValues.reduce((total, value) => total + value, 0) / queueValues.length);
+        const queueValues = response.data.map((data) => data.queue);
+        const averageQueue = Math.round(
+          queueValues.reduce((total, value) => total + value, 0) / queueValues.length
+        );
         setAverageQueue(averageQueue);
       } catch (error) {
         console.error(error);
@@ -62,7 +67,7 @@ function App() {
     fetchQueueAverageInformation();
   }, [selectedAirport]);
 
-
+  // Fetch predicted queue length for the selected date/time
   useEffect(() => {
     const fetchPredictedQueueLength = async () => {
       try {
@@ -78,54 +83,34 @@ function App() {
         console.error(error);
       }
     };
-  
     fetchPredictedQueueLength();
   }, [selectedAirport, selectedDateTime]);
-  
 
+  // Determine airport name
   let airportName;
-  
   if (selectedAirport === 'cph') {
     airportName = 'Copenhagen Airport';
-  }
-
-  if (selectedAirport === 'osl') {
+  } else if (selectedAirport === 'osl') {
     airportName = 'Oslo Airport';
-  }
-
-    if (selectedAirport === 'arn') {
+  } else if (selectedAirport === 'arn') {
     airportName = 'Stockholm Airport';
-  }
-
-  if (selectedAirport === 'dus') {
+  } else if (selectedAirport === 'dus') {
     airportName = 'Düsseldorf Airport';
-  }
-  
-    if (selectedAirport === 'fra') {
+  } else if (selectedAirport === 'fra') {
     airportName = 'Frankfurt Airport';
-  }
-
-    if (selectedAirport === 'muc') {
+  } else if (selectedAirport === 'muc') {
     airportName = 'Munich Airport';
-  }
-
-    if (selectedAirport === 'lhr') {
+  } else if (selectedAirport === 'lhr') {
     airportName = 'London Heathrow Airport';
-  }
-
-  if (selectedAirport === 'ams') {
+  } else if (selectedAirport === 'ams') {
     airportName = 'Amsterdam Airport';
-  }
-
-  if (selectedAirport === 'dub') {
+  } else if (selectedAirport === 'dub') {
     airportName = 'Dublin Airport';
-  }
-
-    if (selectedAirport === 'ist') {
+  } else if (selectedAirport === 'ist') {
     airportName = 'Istanbul Airport';
   }
 
-
+  // Formatting the date/time output
   const day = selectedDateTime.getDate();
   const month = selectedDateTime.toLocaleString('default', { month: 'long' });
   const hour = selectedDateTime.getHours();
@@ -136,109 +121,157 @@ function App() {
   function getOrdinalSuffix(day) {
     const suffixes = ['th', 'st', 'nd', 'rd'];
     const lastDigit = day % 10;
-    return suffixes[(day % 100 - 10) in [11, 12, 13] ? 0 :
-      (lastDigit > 3) ? 0 : lastDigit];
+    // Handle teens (11th, 12th, 13th)
+    if (day % 100 >= 11 && day % 100 <= 13) {
+      return 'th';
+    }
+    // Use suffixes array for 1st, 2nd, 3rd, etc.
+    return suffixes[lastDigit] || 'th';
   }
 
-
-
   return (
+    <>
+      {/* Helmet for dynamic SEO tags */}
+      <Helmet>
+        <title>Waitport - Real-time & Predicted Airport Security Queues</title>
+        <meta
+          name="description"
+          content={`Check live and predicted security queue wait times at ${airportName}. Plan your trip effectively with Waitport's real-time data and future estimates.`}
+        />
+        <link rel="canonical" href="https://waitport.com" />
+      </Helmet>
 
-    <Container fluid="sm" className="bg-light p-5 md">
-      <h1 className="text-center mb-5"><b>Wait</b>port 🛫</h1>
-      <div className="container">
-        <div className="row justify-content-start">
-          <div className="col-12">
-            <p className="lead">Hey, welcome to <b><b>Wait</b>port!</b> <br></br><br></br>You can track the waiting-time in the
-              security across various European airports - we're constantly adding new airports to the
-              page. The data is collected in real-time while the prediction model is re-trained continiously and offers a conservative estimate of the queue at a given date and time.  <br></br><br></br>Start by selecting the airport you're interested in below! 🌏
-              <br></br><br></br>
-              If you also select a time and date for when you expect to be in the airport, I'll do my best to estimate the queue in the future 🔮
-            </p>
-            <br></br>
-            <hr></hr>
-            <br></br>
-          </div>
-          <div className="col-lg-4 col-sm-6">
-
-            <DropdownButton
-              id="airport-select"
-              title={airportName}
-              onSelect={handleAirportChange}>
-              <Dropdown.Item eventKey="cph">🇩🇰 Copenhagen Airport</Dropdown.Item>
-              <Dropdown.Item eventKey="osl">🇳🇴 Oslo Gardermoen Airport</Dropdown.Item>
-              <Dropdown.Item eventKey="arn">🇸🇪 Stockholm Arlanda Airport</Dropdown.Item>
-              <Dropdown.Item eventKey="dus">🇩🇪 Düsseldorf International Airport</Dropdown.Item>
-              <Dropdown.Item eventKey="fra">🇩🇪 Frankfurt Airport</Dropdown.Item>
-              <Dropdown.Item eventKey="muc">🇩🇪 Münich Airport</Dropdown.Item>
-              <Dropdown.Item eventKey="lhr">🇬🇧 London Heathrow Airport</Dropdown.Item>
-              <Dropdown.Item eventKey="ams">🇳🇱 Amsterdam Schipol Airport</Dropdown.Item>
-              <Dropdown.Item eventKey="dub">🇮🇪 Dublin Airport</Dropdown.Item>
-              <Dropdown.Item eventKey="ist">🇹🇷 Istanbul Airport</Dropdown.Item>
-            </DropdownButton>
-
-          </div>
-          <div className="col-lg-8 col-md-12">
-            <br class="d-md-none" />
-            {queue !== null && (
+      <Container fluid="sm" className="bg-light p-5 md">
+        <h1 className="text-center">
+          Waitport 🛫
+        </h1>
+        <h4 className="text-center mb-5">Real-Time & Predicted Airport Security Queues</h4>
+        <div className="container">
+          <div className="row justify-content-start">
+            <div className="col-12">
+              <h2 className="mb-3">About Waitport</h2>
               <p className="lead">
-                The <b>current</b> queue at {airportName} is{" "}
-                <strong>{queue}</strong> minutes. <br></br><i>In the last two hours, the average queue has been <strong>{averageQueue}</strong> minutes.</i>
+                Welcome to <strong>Waitport</strong>! Here, you can track security waiting times 
+                across major European airports in real-time. We also provide 
+                conservative queue <strong>predictions</strong> for future dates and times. 
+                This helps you plan your trip more effectively and avoid unexpected delays. 
+                <br />
+                <br />
+                Start by selecting an airport below, then choose a date and time for your expected travel 
+                to see our predicted queue. <span role="img" aria-label="globe">🌏</span> 
+                <br />
+                <br />
+                Safe travels!
               </p>
-            )}
+              <hr />
+            </div>
 
+            <div className="col-lg-4 col-sm-6">
+              <h2 className="mb-3">Select Airport</h2>
+              <DropdownButton
+                id="airport-select"
+                title={airportName}
+                onSelect={handleAirportChange}
+              >
+                <Dropdown.Item eventKey="cph">🇩🇰 Copenhagen Airport</Dropdown.Item>
+                <Dropdown.Item eventKey="osl">🇳🇴 Oslo Gardermoen Airport</Dropdown.Item>
+                <Dropdown.Item eventKey="arn">🇸🇪 Stockholm Arlanda Airport</Dropdown.Item>
+                <Dropdown.Item eventKey="dus">🇩🇪 Düsseldorf International Airport</Dropdown.Item>
+                <Dropdown.Item eventKey="fra">🇩🇪 Frankfurt Airport</Dropdown.Item>
+                <Dropdown.Item eventKey="muc">🇩🇪 Munich Airport</Dropdown.Item>
+                <Dropdown.Item eventKey="lhr">🇬🇧 London Heathrow Airport</Dropdown.Item>
+                <Dropdown.Item eventKey="ams">🇳🇱 Amsterdam Schipol Airport</Dropdown.Item>
+                <Dropdown.Item eventKey="dub">🇮🇪 Dublin Airport</Dropdown.Item>
+                <Dropdown.Item eventKey="ist">🇹🇷 Istanbul Airport</Dropdown.Item>
+              </DropdownButton>
+            </div>
+
+            <div className="col-lg-8 col-md-12">
+              {queue !== null && (
+                <div className="mt-4">
+                  <p className="lead">
+                    <strong>Current Queue</strong>: The wait time at {airportName} 
+                    is currently <strong>{queue}</strong> minutes.
+                    <br />
+                    <small className="text-muted">
+                      Over the last several entries (approx. 2 hours), 
+                      the <strong>average</strong> queue has been <strong>{averageQueue}</strong> minutes.
+                    </small>
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
 
+          <div className="row mt-5">
+            <div className="col-lg-4 col-sm-6">
+              <h2 className="mb-3">Select Date &amp; Time</h2>
+              <DateTime
+                locale="da-dk"
+                inputProps={{ id: "datetime-picker" }}
+                dateFormat="MM/DD"
+                initialValue={selectedDateTime}
+                initialViewDate={selectedDateTime}
+                initialViewMode="time"
+                onChange={handleDateTimeChange}
+              />
+            </div>
 
-        <div className="row">
-
-          <div className="col-lg-4 col-sm-6">
-            <br></br>
-
-            <DateTime
-              locale="da-dk"
-              inputProps={{ id: "datetime-picker" }}
-              dateFormat="MM/DD"
-              initialValue={selectedDateTime}
-              initialViewDate={selectedDateTime}
-              initialViewMode="time"
-              onChange={handleDateTimeChange}
-            />
+            <div className="col-lg-8 col-md-12">
+              {predictedQueueLength !== null && (
+                <div className="mt-4">
+                  <p className="lead">
+                    <strong>Predicted Queue</strong>: We estimate 
+                    <strong> {predictedQueueLength}</strong> minutes 
+                    of waiting at {airportName} on {formattedDate}.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="col-lg-8 col-md-12">
-            <br></br>
 
-            {predictedQueueLength !== null && (
-              <p className="lead">
-                The <b>predicted</b> queue length is{" "}
-                <strong>{predictedQueueLength}</strong> minutes at{" "}
-                {formattedDate}.
+          <div className="b-example-divider"></div>
+
+          <div className="container">
+            <footer className="py-3 my-4">
+              <ul className="nav justify-content-center border-bottom pb-3 mb-3">
+                <li className="nav-item">
+                  <a
+                    href="https://simonottosen.dk/"
+                    className="nav-link px-2 text-muted"
+                  >
+                    Other projects
+                  </a>
+                </li>
+                <li className="nav-item">
+                  <a
+                    href="https://waitport.com/api/v1/all?order=id.desc&limit=100"
+                    className="nav-link px-2 text-muted"
+                  >
+                    API
+                  </a>
+                </li>
+                <li className="nav-item">
+                  <a
+                    href="https://github.com/simonottosen/cph-security"
+                    className="nav-link px-2 text-muted"
+                  >
+                    GitHub
+                  </a>
+                </li>
+              </ul>
+              <p className="text-center text-muted">
+                Made with{" "}
+                <Link to="/pant" style={{ textDecoration: "none" }}>
+                  ❤️
+                </Link>{" "}
+                by Simon Ottosen
               </p>
-            )}
+            </footer>
           </div>
         </div>
-
-        <div class="b-example-divider"></div>
-
-        <div class="container">
-          <footer class="py-3 my-4">
-            <ul class="nav justify-content-center border-bottom pb-3 mb-3">
-              <li class="nav-item"><a href="https://simonottosen.dk/" class="nav-link px-2 text-muted">Other projects</a></li>
-              <li class="nav-item"><a href="https://waitport.com/api/v1/all?order=id.desc&limit=100" class="nav-link px-2 text-muted">API</a></li>
-              <li class="nav-item"><a href="https://github.com/simonottosen/cph-security" class="nav-link px-2 text-muted">GitHub</a></li>
-            </ul>
-            <p class="text-center text-muted">Made with <Link to="/pant" style={{ textDecoration: 'none' }}>❤️</Link> by Simon Ottosen</p>
-          </footer>
-        </div>
-
-      </div>
-
-
-
-
-    </Container>
-
+      </Container>
+    </>
   );
 }
 

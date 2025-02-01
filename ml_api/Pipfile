@@ -12,6 +12,8 @@ flask-caching = "==1.10.1"
 flask_crontab = "*"
 xgboost = "*"
 scikit-learn = "*"
+supabase = "*"
+dotenv = "*"
 
 [dev-packages]
 

@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------------------------
 # Environment & Global Variables
 # ------------------------------------------------------------------------------
+UseSupabase = 0  # If 1 then Yes, if 0 then No. Do not use Supabase for production
 if os.environ.get("CPHAPI_HOST"):
     CPHAPI_HOST = os.environ.get("CPHAPI_HOST")
 else:
@@ -86,6 +87,16 @@ def get_data_via_supabase_client() -> pd.DataFrame:
         .execute()
     )
     df = pd.DataFrame(response.data)
+    return df
+
+def get_data_via_local_database() -> pd.DataFrame:
+    start_time_load_data = time.time()
+    newmodeldata_url = (
+        str(CPHAPI_HOST)
+        + "?order=id.desc&limit=100000&select=id,queue,timestamp,airport&airport=not.eq.BER"
+    )
+    df = pd.read_json(newmodeldata_url)
+    print("Loaded data successfully in %.2f seconds " % (time.time() - start_time_load_data))
     return df
 
 # ------------------------------------------------------------------------------
@@ -162,7 +173,10 @@ def get_data():
     logger.info("Fetching full dataset...")
 
     try:
-        dataframe = get_data_via_supabase_client()
+        if UseSupabase == 1:
+            dataframe = get_data_via_supabase_client()
+        else:
+            dataframe = get_data_via_local_database()
     except Exception as e:
         logger.error(f"Error fetching data: {e}")
         return pd.DataFrame()  # Return empty DF on error
@@ -177,6 +191,12 @@ def get_data():
     
     # Set index
     df = dataframe.set_index("timestamp")
+
+    # -------------------------------------------------------------------------
+    # Option 4 fix: Sort by the timestamp index and offset duplicates by 1ns
+    # -------------------------------------------------------------------------
+    df.sort_index(inplace=True)
+    df.index = df.index + pd.to_timedelta(df.groupby(level=0).cumcount(), unit='ns')
 
     # Basic time features
     df['year'] = df.index.year
@@ -218,7 +238,10 @@ def get_data_light():
     logger.info("Fetching light dataset...")
 
     try:
-        dataframe = get_data_via_supabase_client()
+        if UseSupabase == 1:
+            dataframe = get_data_via_supabase_client()
+        else:
+            dataframe = get_data_via_local_database()
     except Exception as e:
         logger.error(f"Error fetching data: {e}")
         return pd.DataFrame()  # Return empty DF on error
@@ -228,6 +251,12 @@ def get_data_light():
     dataframe["timestamp"] = StartTime
     
     df = dataframe.set_index("timestamp")
+
+    # -------------------------------------------------------------------------
+    # Option 4 fix: Sort by the timestamp index and offset duplicates by 1ns
+    # -------------------------------------------------------------------------
+    df.sort_index(inplace=True)
+    df.index = df.index + pd.to_timedelta(df.groupby(level=0).cumcount(), unit='ns')
 
     df['year'] = df.index.year
     df['hour'] = df.index.hour
@@ -296,9 +325,11 @@ def train_models():
             if rc not in airport_df.columns:
                 airport_df[rc] = 0.0
 
-        cutoff = int(len(airport_df) * 0.8)
+        cutoff = int(len(airport_df) * 0.9)
         train_df = airport_df.iloc[:cutoff]
         test_df  = airport_df.iloc[cutoff:]
+        # Log how many rows are in the training set vs test set
+        logger.info(f"{airport_code} - training set size: {len(train_df)}, test set size: {len(test_df)}")
 
         if len(train_df) < 10:
             logger.warning(f"Not enough training rows ({len(train_df)}) for {airport_code}, using fallback.")

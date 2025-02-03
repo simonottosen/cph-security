@@ -113,6 +113,11 @@ export default function AirportPage({ code, airportName }) {
     fetchPredictedQueueLength();
   }, [code, selectedDateTime]);
 
+  // Helper function for pluralization
+  const formatMinutes = (minutes) => {
+    return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+  };
+
   // Formatting the date/time output
   const day = selectedDateTime.getDate();
   const month = selectedDateTime.toLocaleString('default', { month: 'long' });
@@ -138,9 +143,13 @@ export default function AirportPage({ code, airportName }) {
           name="description"
           content={`Check live and predicted security queue wait times at ${airportName}. Plan your trip effectively with Waitport's real-time data and future estimates.`}
         />
+        <meta name="keywords" content={`airport security queue, real-time wait times, ${airportName}, travel planning, Waitport, security wait predictions`} />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta property="og:title" content={`Waitport - Security Queues at ${airportName}`} />
         <meta property="og:description" content={`Stay updated with the latest security queue times at ${airportName}. Avoid long waits and plan your journey efficiently.`} />
+        <meta property="og:type" content="website" />
         <meta property="og:url" content={`https://waitport.com/airports/${code}`} />
+        <meta property="og:image" content={`https://waitport.com/images/${code}.jpg`} /> {/* Add a relevant image */}
         <link rel="canonical" href={`https://waitport.com/airports/${code}`} />
         {/* Structured Data for SEO */}
         <script
@@ -152,134 +161,168 @@ export default function AirportPage({ code, airportName }) {
               "name": `Waitport - Security Queues at ${airportName}`,
               "description": `Real-time and predicted security queue wait times at ${airportName}. Plan your trip effectively with our data.`,
               "url": `https://waitport.com/airports/${code}`,
+              "mainEntity": {
+                "@type": "Service",
+                "serviceType": "Security Queue Information",
+                "provider": {
+                  "@type": "Organization",
+                  "name": "Waitport",
+                  "url": "https://waitport.com"
+                },
+                "areaServed": {
+                  "@type": "Airport",
+                  "name": airportName,
+                  "iataCode": code.toUpperCase()
+                }
+              }
             }),
           }}
         />
       </Head>
 
+      {/* Top-Level Container with Original Styling */}
       <Container fluid="sm" className="bg-light p-5">
-        <h1 className="text-center">Waitport 🛫</h1>
-        <h4 className="text-center mb-5">Real-Time & Predicted Airport Security Queues</h4>
+        {/* Header Section */}
+        <header>
+          <h1 className="text-center">Waitport 🛫</h1>
+          <h4 className="text-center mb-5">Real-Time &amp; Predicted Airport Security Queues</h4>
+        </header>
 
         <div className="container">
           {/* About Section */}
-          <div className="row justify-content-start">
-            <div className="col-12">
-              <h2 className="mb-3">About Waitport</h2>
-              <p className="lead">
-                Welcome to <strong>Waitport</strong>! Here, you can track security waiting times across major European airports in real-time.
-                We also provide conservative queue <strong>predictions</strong> for future dates and times. This helps you plan your trip more effectively and avoid unexpected delays.
-                <br /><br />
-                Start by selecting an airport below, then choose a date and time for your expected travel to see our predicted queue. <span role="img" aria-label="globe">🌏</span>
-                <br /><br />
-                Safe travels!
-              </p>
-              <hr />
+          <section aria-labelledby="about-waitport">
+            <div className="row justify-content-start">
+              <div className="col-12">
+                <h2 id="about-waitport" className="mb-3">About Waitport</h2>
+                <p className="lead">
+                  Welcome to <strong>Waitport</strong>! Here, you can track security waiting times across major European airports in real-time.
+                  We also provide conservative queue <strong>predictions</strong> for future dates and times. This helps you plan your trip more effectively and avoid unexpected delays.
+                  <br /><br />
+                  Start by selecting an airport below, then choose a date and time for your expected travel to see our predicted queue. <span role="img" aria-label="globe">🌏</span>
+                  <br /><br />
+                  Safe travels!
+                </p>
+                <hr />
+              </div>
             </div>
+          </section>
 
-            {/* Airport Selection Dropdown */}
-            <div className="col-lg-4 col-sm-6">
-              <h2 className="mb-3">Select Airport</h2>
-              <DropdownButton
-                id="airport-select"
-                title={airportName}
-                onSelect={(eventKey) => {
-                  // Redirect to the selected airport's page
-                  window.location.href = `/airports/${eventKey}`;
-                }}
-              >
-                {Object.entries(airportNames).map(([code, name]) => (
-                  <Dropdown.Item key={code} eventKey={code}>
-                    {name}
-                  </Dropdown.Item>
-                ))}
-              </DropdownButton>
+          {/* Airport Selection Dropdown */}
+          <section aria-labelledby="select-airport">
+            <div className="row">
+              <div className="col-lg-4 col-sm-6">
+                <h2 id="select-airport" className="mb-3">Select Airport</h2>
+                <DropdownButton
+                  id="airport-select"
+                  title={airportName}
+                  onSelect={(eventKey) => {
+                    // Redirect to the selected airport's page
+                    window.location.href = `/airports/${eventKey}`;
+                  }}
+                  aria-label="Select Airport Dropdown"
+                >
+                  {Object.entries(airportNames).map(([code, name]) => (
+                    <Dropdown.Item key={code} eventKey={code}>
+                      {name}
+                    </Dropdown.Item>
+                  ))}
+                </DropdownButton>
+              </div>
             </div>
+          </section>
 
-            {/* Current Queue Information */}
-            <div className="col-lg-8 col-md-12">
-              {queue !== null && (
-                <div className="mt-4">
-                  <p className="lead">
-                    <strong>Current Queue</strong>: The wait time at {airportName} is currently <strong>{queue}</strong> minutes.
-                    <br />
-                    <small className="text-muted">
-                      Over the last several entries (approx. 2 hours), the <strong>average</strong> queue has been <strong>{averageQueue}</strong> minutes.
-                    </small>
-                  </p>
-                </div>
-              )}
+          {/* Current Queue Information */}
+          <section aria-labelledby="current-queue" className="mt-4">
+            <div className="row">
+              <div className="col-lg-8 col-md-12">
+                {queue !== null && (
+                  <div>
+                    <h2 id="current-queue" className="mb-3">Current Security Queue</h2>
+                    <p className="lead">
+                      <strong>Current Queue</strong>: The wait time at {airportName} is currently <strong>{formatMinutes(queue)}</strong>.
+                      <br />
+                      <small className="text-muted">
+                        Over the last several entries (approx. 2 hours), the <strong>average</strong> queue has been <strong>{formatMinutes(averageQueue)}</strong>.
+                      </small>
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          </section>
 
           {/* Predicted Queue Section */}
-          <div className="row mt-5">
-            <div className="col-lg-4 col-sm-6">
-              <h2 className="mb-3">Select Date &amp; Time</h2>
-              <DateTime
-                locale="da-dk"
-                inputProps={{ id: "datetime-picker" }}
-                dateFormat="MM/DD"
-                initialValue={selectedDateTime}
-                initialViewDate={selectedDateTime}
-                initialViewMode="time"
-                onChange={handleDateTimeChange}
-              />
-            </div>
+          <section aria-labelledby="predicted-queue" className="mt-5">
+            <div className="row">
+              <div className="col-lg-4 col-sm-6">
+                <h2 id="predicted-queue" className="mb-3">Select Date &amp; Time</h2>
+                <DateTime
+                  locale="da-dk"
+                  inputProps={{ id: "datetime-picker", 'aria-label': "Select Date and Time" }}
+                  dateFormat="MM/DD"
+                  initialValue={selectedDateTime}
+                  initialViewDate={selectedDateTime}
+                  initialViewMode="time"
+                  onChange={handleDateTimeChange}
+                />
+              </div>
 
-            <div className="col-lg-8 col-md-12">
-              {predictedQueueLength !== null && (
-                <div className="mt-4">
-                  <p className="lead">
-                    <strong>Predicted Queue</strong>: We estimate <strong>{predictedQueueLength}</strong> minutes of waiting at {airportName} on {formattedDate}.
-                  </p>
-                </div>
-              )}
+              <div className="col-lg-8 col-md-12">
+                {predictedQueueLength !== null && (
+                  <div className="mt-4">
+                    <h2 className="mb-3">Predicted Security Queue</h2>
+                    <p className="lead">
+                      <strong>Predicted Queue</strong>: We estimate <strong>{formatMinutes(predictedQueueLength)}</strong> of waiting at {airportName} on {formattedDate}.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          </section>
 
           <div className="b-example-divider"></div>
 
           {/* Footer Section */}
-          <div className="container">
-            <footer className="py-3 my-4">
-              <ul className="nav justify-content-center border-bottom pb-3 mb-3">
-                <li className="nav-item">
-                  <a
-                    href="https://simonottosen.dk/"
-                    className="nav-link px-2 text-muted"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Other projects
-                  </a>
-                </li>
-                <li className="nav-item">
-                  <a
-                    href="https://waitport.com/api/v1/all?order=id.desc&limit=100"
-                    className="nav-link px-2 text-muted"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    API
-                  </a>
-                </li>
-                <li className="nav-item">
-                  <a
-                    href="https://github.com/simonottosen/cph-security"
-                    className="nav-link px-2 text-muted"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    GitHub
-                  </a>
-                </li>
-              </ul>
-              <p className="text-center text-muted">
-                Made with <span role="img" aria-label="heart">❤️</span> by Simon Ottosen
-              </p>
-            </footer>
-          </div>
+          <footer className="py-3 my-4">
+            <ul className="nav justify-content-center border-bottom pb-3 mb-3">
+              <li className="nav-item">
+                <a
+                  href="https://simonottosen.dk/"
+                  className="nav-link px-2 text-muted"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Other Projects
+                </a>
+              </li>
+              <li className="nav-item">
+                <a
+                  href="https://waitport.com/api/v1/all?order=id.desc&limit=100"
+                  className="nav-link px-2 text-muted"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  API Documentation
+                </a>
+              </li>
+              <li className="nav-item">
+                <a
+                  href="https://github.com/simonottosen/cph-security"
+                  className="nav-link px-2 text-muted"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  GitHub Repository
+                </a>
+              </li>
+            </ul>
+            <p className="text-center text-muted">
+              Made with <span role="img" aria-label="heart">❤️</span> by Simon Ottosen
+            </p>
+            <p className="text-center text-muted">
+              &copy; {new Date().getFullYear()} Waitport. All rights reserved.
+            </p>
+          </footer>
         </div>
       </Container>
     </>

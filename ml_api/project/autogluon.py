@@ -535,8 +535,32 @@ def predict_queue(timestamp_df: pd.DataFrame) -> float:
     # 7) Sort columns
     timestamp_df = timestamp_df.reindex(sorted(timestamp_df.columns), axis=1)
 
+    # Step 1: Reset the index to turn the timestamp index into a column
+    timestamp_df = timestamp_df.reset_index()
+
+    # Optional: Rename the new column if desired (e.g., 'timestamp')
+    timestamp_df = timestamp_df.rename(columns={'index': 'timestamp'})
+
+    # Step 2: The index is already reset to a default integer index after reset_index()
+    timestamp_df['timestamp'] = pd.to_datetime(timestamp_df['timestamp'])
+    if timestamp_df['timestamp'].dt.tz is not None:
+        timestamp_df['timestamp'] = timestamp_df['timestamp'].dt.tz_convert(None)
+    timestamp_df['timestamp'] = timestamp_df['timestamp'].dt.floor('s')
+
+    # (Optional) If you want the 'ID' column to be the first column
+    # Rearrange the columns
+
+    # Display the updated DataFrame
+
+
+    timestamp_df_predict = TimeSeriesDataFrame.from_data_frame(
+        timestamp_df,
+        id_column="airport",
+        timestamp_column="timestamp"
+    )
+
     # 8) Predict
-    prediction = model.predict(timestamp_df)
+    prediction = model.predict(timestamp_df_predict)
     prediction = prediction + 1  # final offset
     return round(prediction[0])
 

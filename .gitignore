@@ -5,7 +5,9 @@ __pycache__/
 .env
 .next
 frontend-nextgen/.env
-
+AutogluonModels/
+autogluon-m4-hourly/
+*.png
 
 # C extensions
 *.so

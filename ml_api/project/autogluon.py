@@ -84,6 +84,7 @@ def get_data_via_supabase_client() -> pd.DataFrame:
         supabase
         .table("waitingtime")
         .select("id,queue,timestamp,airport")
+        .eq("airport", "CPH")  # Only select CPH
         .neq("airport", "BER")  # Exclude BER
         .order("id", desc=True)
         .execute()

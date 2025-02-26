@@ -8,6 +8,7 @@ frontend-nextgen/.env
 AutogluonModels/
 autogluon-m4-hourly/
 *.png
+cph.json
 
 # C extensions
 *.so

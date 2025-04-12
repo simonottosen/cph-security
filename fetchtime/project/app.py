@@ -164,7 +164,7 @@ def munich():
 def istanbul():
     healthcheck = os.environ.get("IST_HEALTHCHECK") 
     airport = "IST"
-    airport_api = "https://www.istairport.com/umbraco/api/Checkpoint/GetWaitingTimes"
+    airport_api = "https://www.istairport.com/umbraco/api/Checkpoint/GetWaitingTimes?culture=en-US"
     headers = {"Referer": "https://www.istairport.com/en/?locale=en"}
 
     

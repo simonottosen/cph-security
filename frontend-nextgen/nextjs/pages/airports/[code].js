@@ -13,7 +13,15 @@ import "react-datetime/css/react-datetime.css";
 import "moment/locale/da";
 
 // Dynamically import DateTime to disable SSR for this component
-const DateTime = dynamic(() => import("react-datetime"), { ssr: false });
+const DateTime = dynamic(
+  () =>
+    import("react-datetime")
+      .then((mod) => mod.default || mod),
+  {
+    ssr: false,
+    loading: () => <p>Loading date picker...</p>,
+  }
+);
 
 const API_URL = process.env.NEXT_PUBLIC_API_HOST || "/api/v1/predict";
 
@@ -262,12 +270,12 @@ export default function AirportPage({ code, airportName }) {
                       Current Security Queue
                     </h2>
                     <p className="lead">
-                      <strong>Current Queue</strong>: The wait time at{" "}
+                       The wait time at{" "}
                       {airportName} is currently{" "}
                       <strong>{formatMinutes(queue)}</strong>.
                       <br />
                       <small className="text-muted">
-                        Over the last several entries (approx. 2 hours), the{" "}
+                        Over the last 2 hours, the{" "}
                         <strong>average</strong> queue has been{" "}
                         <strong>{formatMinutes(averageQueue)}</strong>.
                       </small>
@@ -301,7 +309,7 @@ export default function AirportPage({ code, airportName }) {
                   <div className="mt-4">
                     <h2 className="mb-3">Predicted Security Queue</h2>
                     <p className="lead">
-                      <strong>Predicted Queue</strong>: We estimate{" "}
+                      We estimate{" "}
                       <strong>{formatMinutes(predictedQueueLength)}</strong> of
                       waiting at {airportName} on {formattedDate}.
                     </p>

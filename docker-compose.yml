@@ -24,7 +24,7 @@ services:
       POSTGRES_PORT: ${POSTGRES_PORT}
       PGRST_DB_URI: ${PGRST_DB_URI}
       PGRST_DB_SCHEMAS: public
-      PGRST_OPENAPI_SERVER_PROXY_URI: https://cphapi.simonottosen.dk
+      PGRST_OPENAPI_SERVER_PROXY_URI: ${API_URL}
       PGRST_DB_ANON_ROLE: web_anon
 
   swagger-ui:
@@ -33,7 +33,7 @@ services:
     depends_on:
       - cph_postgres_db
     environment:
-      - API_URL=https://cphapi.simonottosen.dk/
+      API_URL: ${API_URL}
     restart: unless-stopped
 
   universal_fetchtime:

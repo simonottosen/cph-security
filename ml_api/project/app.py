@@ -112,7 +112,7 @@ def get_data_via_local_database() -> pd.DataFrame:
         dfs.append(df_ap)
     
     df = pd.concat(dfs, ignore_index=True)
-    print("Loaded ALL data successfully in %.2f seconds " % (time.time() - start_time_load_data))
+    print("Loaded ALL data successfully from local database in %.2f seconds " % (time.time() - start_time_load_data))
     return df
 
 # ------------------------------------------------------------------------------
@@ -150,7 +150,7 @@ def get_data_via_local_database_light() -> pd.DataFrame:
         dfs.append(df_ap)
     
     df = pd.concat(dfs, ignore_index=True)
-    print("Loaded LIGHT data (last 7 days) in %.2f seconds " % (time.time() - start_time_load_data))
+    print("Loaded LIGHT data (last 7 days) from local database in %.2f seconds " % (time.time() - start_time_load_data))
     return df
 
 # ------------------------------------------------------------------------------

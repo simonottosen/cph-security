@@ -93,7 +93,7 @@ services:
   ofelia:
     container_name: "ofelia_scheduler"
     image: mcuadros/ofelia:latest
-    restart: always
+    restart: unless-stopped
     depends_on:
       - universal_fetchtime
     command: daemon --docker
@@ -112,7 +112,7 @@ services:
   apisix_dashboard:
     image: apache/apisix-dashboard
     container_name: "apisix_dashboard"
-    restart: always
+    restart: unless-stopped
     volumes:
     - ./config/apisix_dashboard_conf/conf.yaml:/usr/local/apisix-dashboard/conf/conf.yaml
     ports:
@@ -121,7 +121,7 @@ services:
   apisix:
     container_name: "apisix"
     image: apache/apisix
-    restart: always
+    restart: unless-stopped
     volumes:
       - ./config/apisix_conf/config.yaml:/usr/local/apisix/conf/config.yaml:ro
     depends_on:
@@ -136,7 +136,7 @@ services:
   etcd:
     container_name: "etcd"
     image: bitnami/etcd:3.4.15
-    restart: always
+    restart: unless-stopped
     volumes:
       - ./config/etcd_data:/bitnami/etcd
     environment:

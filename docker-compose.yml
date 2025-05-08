@@ -10,6 +10,8 @@ services:
       - ./cph/db:/var/lib/postgresql/data
       - ./cph-security/database/create_tables.sql:/docker-entrypoint-initdb.d/create_tables.sql
     restart: unless-stopped
+    ports:
+    - "80:80/tcp"
     
   reverse-proxy:
     image: "nginx:alpine"

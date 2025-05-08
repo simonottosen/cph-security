@@ -10,6 +10,13 @@ services:
       - ./cph/db:/var/lib/postgresql/data
       - ./cph-security/database/create_tables.sql:/docker-entrypoint-initdb.d/create_tables.sql
     restart: unless-stopped
+    
+  reverse-proxy:
+    image: "nginx:alpine"
+    container_name: "reverse-proxy"
+    volumes:
+      - ./config/reverse_proxy:/etc/nginx/conf.d
+    restart: unless-stopped
 
   cph_postgrest:
     image: postgrest/postgrest

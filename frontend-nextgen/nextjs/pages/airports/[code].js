@@ -256,7 +256,7 @@ export default function AirportPage({ code, airportName }) {
           <section aria-labelledby="queue-overview" className="mt-4">
             <div className="row">
               <div className="col-lg-6 col-md-12">
-                <Card className="mb-4">
+                <Card className="mb-4 shadow-sm rounded-lg">
                   <Card.Body aria-live="polite">
                     <Card.Title>Current Security Queue</Card.Title>
                     {(loadingQueue || loadingAverage) ? (
@@ -276,7 +276,7 @@ export default function AirportPage({ code, airportName }) {
               <div className="col-12 d-block d-lg-none">
               </div>
               <div className="col-lg-6 col-md-12">
-                <Card className="mb-4">
+                <Card className="mb-4 shadow-sm rounded-lg">
                   <Card.Body aria-live="polite">
                     <Card.Title>Predicted Security Queue</Card.Title>
                     {loadingPredicted ? (

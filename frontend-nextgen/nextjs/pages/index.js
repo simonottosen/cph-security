@@ -38,6 +38,7 @@ export default function Home() {
         <meta property="og:type" content="website" />
         <link rel="canonical" href="https://waitport.com" />
         {/* Structured Data for SEO */}
+        <link rel="icon" href="/favicon.ico" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{

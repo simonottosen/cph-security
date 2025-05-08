@@ -11,6 +11,8 @@ import Link from "next/link";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "react-datetime/css/react-datetime.css";
 import "moment/locale/da";
+import Card from "react-bootstrap/Card";
+import InputGroup from "react-bootstrap/InputGroup";
 
 // Dynamically import DateTime to disable SSR for this component
 const DateTime = dynamic(
@@ -77,8 +79,11 @@ export default function AirportPage({ code, airportName }) {
 
   const [queue, setQueue] = useState(null);
   const [averageQueue, setAverageQueue] = useState(null);
+  const [loadingQueue, setLoadingQueue] = useState(true);
+  const [loadingAverage, setLoadingAverage] = useState(true);
   const [selectedDateTime, setSelectedDateTime] = useState(() => new Date(Date.now() + 2 * 60 * 60 * 1000));
   const [predictedQueueLength, setPredictedQueueLength] = useState(null);
+  const [loadingPredicted, setLoadingPredicted] = useState(true);
 
   const handleDateTimeChange = (momentObj) => {
     setSelectedDateTime(momentObj.toDate());
@@ -87,12 +92,15 @@ export default function AirportPage({ code, airportName }) {
   useEffect(() => {
     const fetchQueueInformation = async () => {
       try {
+        setLoadingQueue(true);
         const response = await axios.get(
           `https://waitport.com/api/v1/all?airport=eq.${code.toUpperCase()}&limit=1&select=queue&order=id.desc`
         );
         setQueue(response.data[0]?.queue || "0");
       } catch (error) {
         console.error(error);
+      } finally {
+        setLoadingQueue(false);
       }
     };
     fetchQueueInformation();
@@ -101,6 +109,7 @@ export default function AirportPage({ code, airportName }) {
   useEffect(() => {
     const fetchQueueAverageInformation = async () => {
       try {
+        setLoadingAverage(true);
         const response = await axios.get(
           `https://waitport.com/api/v1/all?airport=eq.${code.toUpperCase()}&select=queue&limit=24&order=id.desc`
         );
@@ -114,6 +123,8 @@ export default function AirportPage({ code, airportName }) {
         setAverageQueue(average);
       } catch (error) {
         console.error(error);
+      } finally {
+        setLoadingAverage(false);
       }
     };
     fetchQueueAverageInformation();
@@ -122,6 +133,7 @@ export default function AirportPage({ code, airportName }) {
   useEffect(() => {
     const fetchPredictedQueueLength = async () => {
       try {
+        setLoadingPredicted(true);
         const dateTimeString = selectedDateTime
           .toISOString()
           .slice(0, 16)
@@ -134,6 +146,8 @@ export default function AirportPage({ code, airportName }) {
         );
       } catch (error) {
         console.error(error);
+      } finally {
+        setLoadingPredicted(false);
       }
     };
     fetchPredictedQueueLength();
@@ -178,6 +192,7 @@ export default function AirportPage({ code, airportName }) {
   return (
     <>
       <Head>
+        <link rel="icon" href="/favicon.ico" />
         <title>{`Waitport - Security Queues at ${airportName}`}</title>
         <meta
           name="description"
@@ -241,48 +256,57 @@ export default function AirportPage({ code, airportName }) {
           <section aria-labelledby="queue-overview" className="mt-4">
             <div className="row">
               <div className="col-lg-6 col-md-12">
-                {queue !== null && (
-                  <div>
-                    <h2 id="current-queue" className="mb-3">
-                      Current Security Queue
-                    </h2>
-                    <p className="lead">
-                      The wait time at {displayName} is currently <strong>{formatMinutes(queue)}</strong>.
-                      <br />
-                      <small className="text-muted">
-                        Over the last 2 hours, the <strong>average</strong> queue has been <strong>{formatMinutes(averageQueue)}</strong>.
-                      </small>
-                    </p>
-                  </div>
-                )}
+                <Card className="mb-4">
+                  <Card.Body aria-live="polite">
+                    <Card.Title>Current Security Queue</Card.Title>
+                    {(loadingQueue || loadingAverage) ? (
+                      <p>Loading...</p>
+                    ) : (
+                      <p className="lead">
+                        The wait time at {displayName} is currently <strong>{formatMinutes(queue)}</strong>.
+                        <br />
+                        <small className="text-muted">
+                          Over the last 2 hours, the <strong>average</strong> queue has been <strong>{formatMinutes(averageQueue)}</strong>.
+                        </small>
+                      </p>
+                    )}
+                  </Card.Body>
+                </Card>
               </div>
               <div className="col-12 d-block d-lg-none">
-                <hr className="my-4" />
               </div>
               <div className="col-lg-6 col-md-12">
-                {predictedQueueLength !== null && (
-                  <div>
-                    <h2 id="predicted-queue" className="mb-3">
-                      Predicted Security Queue
-                    </h2>
-                    <p className="lead">
-                      We estimate <strong>{formatMinutes(predictedQueueLength)}</strong> of waiting at {displayName} {timeDiffText}.
-                    </p>
-                  </div>
-                )}
-                <div className="mt-3">
-                  <h5 className="mb-2">Select Date &amp; Time</h5>
-                  <DateTime
-                    locale="da-dk"
-                    inputProps={{
-                      id: "datetime-picker",
-                      "aria-label": "Select Date and Time",
-                    }}
-                    dateFormat="MM/DD"
-                    value={selectedDateTime}
-                    onChange={handleDateTimeChange}
-                  />
-                </div>
+                <Card className="mb-4">
+                  <Card.Body aria-live="polite">
+                    <Card.Title>Predicted Security Queue</Card.Title>
+                    {loadingPredicted ? (
+                      <p>Loading...</p>
+                    ) : (
+                      <p className="lead">
+                        We estimate <strong>{formatMinutes(predictedQueueLength)}</strong> of waiting at {displayName} {timeDiffText}.
+                      </p>
+                    )}
+                    <div className="mt-3">
+                      <h5 className="mb-2">Select Date &amp; Time</h5>
+                      <InputGroup>
+                        <InputGroup.Text id="datetime-addon" aria-label="calendar icon">📅</InputGroup.Text>
+                        <DateTime
+                          locale="da-dk"
+                          inputProps={{
+                            id: "datetime-picker",
+                            "aria-label": "Select Date and Time",
+                            className: "form-control"
+                          }}
+                          dateFormat="MM/DD"
+                          timeFormat="HH:mm"
+                          closeOnSelect={true}
+                          value={selectedDateTime}
+                          onChange={handleDateTimeChange}
+                        />
+                      </InputGroup>
+                    </div>
+                  </Card.Body>
+                </Card>
               </div>
             </div>
           </section>

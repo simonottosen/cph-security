@@ -15,7 +15,7 @@
         "bootstrap": "^5.3.3",
         "jquery": "^3.7.1",
         "moment": "^2.30.1",
-        "next": "15.1.6",
+        "next": "15.2.4",
         "next-sitemap": "^4.2.3",
         "popper.js": "^1.16.1",
         "react": "18.2.0",

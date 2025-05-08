@@ -1,6 +1,6 @@
 services:
   cph_postgres_db:
-    image: postgres:14
+    image: postgres:17
     container_name: "cph_postgres_db"
     environment: 
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

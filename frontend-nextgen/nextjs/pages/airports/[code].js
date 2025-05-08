@@ -39,6 +39,19 @@ const airportNames = {
   ist: "🇹🇷 Istanbul Airport",
 };
 
+const airportNamesText = {
+  cph: "Copenhagen Airport",
+  osl: "Oslo Airport",
+  arn: "Stockholm Airport",
+  dus: "Düsseldorf Airport",
+  fra: "Frankfurt Airport",
+  muc: "Munich Airport",
+  lhr: "London Heathrow Airport",
+  ams: "Amsterdam Airport",
+  dub: "Dublin Airport",
+  ist: "Istanbul Airport",
+};
+
 export async function getStaticPaths() {
   const paths = Object.keys(airportNames).map((code) => ({
     params: { code },
@@ -60,9 +73,11 @@ export async function getStaticProps({ params }) {
 }
 
 export default function AirportPage({ code, airportName }) {
+  const displayName = airportNamesText[code] || airportName;
+
   const [queue, setQueue] = useState(null);
   const [averageQueue, setAverageQueue] = useState(null);
-  const [selectedDateTime, setSelectedDateTime] = useState(new Date());
+  const [selectedDateTime, setSelectedDateTime] = useState(() => new Date(Date.now() + 2 * 60 * 60 * 1000));
   const [predictedQueueLength, setPredictedQueueLength] = useState(null);
 
   const handleDateTimeChange = (momentObj) => {
@@ -136,6 +151,20 @@ export default function AirportPage({ code, airportName }) {
   const minute = selectedDateTime.getMinutes().toString().padStart(2, "0");
 
   const formattedDate = `${day}${getOrdinalSuffix(day)} of ${month} at ${hour}:${minute}`;
+  const now = new Date();
+  const diffMs = selectedDateTime - now;
+  const diffMinutes = Math.round(diffMs / 60000);
+  let timeDiffText = "";
+  if (diffMinutes === 0) {
+    timeDiffText = "at this time";
+  } else if (diffMinutes > 0) {
+    if (diffMinutes < 60) {
+      timeDiffText = `in ${diffMinutes} minutes`;
+    } else {
+      const diffHours = Math.round(diffMinutes / 60);
+      timeDiffText = `in ${diffHours} hours`;
+    }
+  }
 
   function getOrdinalSuffix(day) {
     const suffixes = ["th", "st", "nd", "rd"];
@@ -208,6 +237,58 @@ export default function AirportPage({ code, airportName }) {
         </header>
 
         <div className="container">
+
+          <section aria-labelledby="queue-overview" className="mt-4">
+            <div className="row">
+              <div className="col-lg-6 col-md-12">
+                {queue !== null && (
+                  <div>
+                    <h2 id="current-queue" className="mb-3">
+                      Current Security Queue
+                    </h2>
+                    <p className="lead">
+                      The wait time at {displayName} is currently <strong>{formatMinutes(queue)}</strong>.
+                      <br />
+                      <small className="text-muted">
+                        Over the last 2 hours, the <strong>average</strong> queue has been <strong>{formatMinutes(averageQueue)}</strong>.
+                      </small>
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className="col-12 d-block d-lg-none">
+                <hr className="my-4" />
+              </div>
+              <div className="col-lg-6 col-md-12">
+                {predictedQueueLength !== null && (
+                  <div>
+                    <h2 id="predicted-queue" className="mb-3">
+                      Predicted Security Queue
+                    </h2>
+                    <p className="lead">
+                      We estimate <strong>{formatMinutes(predictedQueueLength)}</strong> of waiting at {displayName} {timeDiffText}.
+                    </p>
+                  </div>
+                )}
+                <div className="mt-3">
+                  <h5 className="mb-2">Select Date &amp; Time</h5>
+                  <DateTime
+                    locale="da-dk"
+                    inputProps={{
+                      id: "datetime-picker",
+                      "aria-label": "Select Date and Time",
+                    }}
+                    dateFormat="MM/DD"
+                    value={selectedDateTime}
+                    onChange={handleDateTimeChange}
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <hr className="my-4" />
+
           <section aria-labelledby="about-waitport">
             <div className="row justify-content-start">
               <div className="col-12">
@@ -232,16 +313,16 @@ export default function AirportPage({ code, airportName }) {
                   <br />
                   Safe travels!
                 </p>
-                <hr />
               </div>
             </div>
           </section>
+          <hr className="my-4" />
 
           <section aria-labelledby="select-airport">
             <div className="row">
               <div className="col-lg-4 col-sm-6">
                 <h2 id="select-airport" className="mb-3">
-                  Select Airport
+                  Select another airport
                 </h2>
                 <DropdownButton
                   id="airport-select"
@@ -257,64 +338,6 @@ export default function AirportPage({ code, airportName }) {
                     </Dropdown.Item>
                   ))}
                 </DropdownButton>
-              </div>
-            </div>
-          </section>
-
-          <section aria-labelledby="current-queue" className="mt-4">
-            <div className="row">
-              <div className="col-lg-8 col-md-12">
-                {queue !== null && (
-                  <div>
-                    <h2 id="current-queue" className="mb-3">
-                      Current Security Queue
-                    </h2>
-                    <p className="lead">
-                       The wait time at{" "}
-                      {airportName} is currently{" "}
-                      <strong>{formatMinutes(queue)}</strong>.
-                      <br />
-                      <small className="text-muted">
-                        Over the last 2 hours, the{" "}
-                        <strong>average</strong> queue has been{" "}
-                        <strong>{formatMinutes(averageQueue)}</strong>.
-                      </small>
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </section>
-
-          <section aria-labelledby="predicted-queue" className="mt-5">
-            <div className="row">
-              <div className="col-lg-4 col-sm-6">
-                <h2 id="predicted-queue" className="mb-3">
-                  Select Date &amp; Time
-                </h2>
-                <DateTime
-                  locale="da-dk"
-                  inputProps={{
-                    id: "datetime-picker",
-                    "aria-label": "Select Date and Time",
-                  }}
-                  dateFormat="MM/DD"
-                  value={selectedDateTime}
-                  onChange={handleDateTimeChange}
-                />
-              </div>
-
-              <div className="col-lg-8 col-md-12">
-                {predictedQueueLength !== null && (
-                  <div className="mt-4">
-                    <h2 className="mb-3">Predicted Security Queue</h2>
-                    <p className="lead">
-                      We estimate{" "}
-                      <strong>{formatMinutes(predictedQueueLength)}</strong> of
-                      waiting at {airportName} on {formattedDate}.
-                    </p>
-                  </div>
-                )}
               </div>
             </div>
           </section>

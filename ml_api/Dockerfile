@@ -1,5 +1,5 @@
 # Pull base image
-FROM python:3.8
+FROM python:3.12
 
 # Use the recommended "key=value" format for ENV
 ENV PYTHONUNBUFFERED=1

@@ -13,6 +13,7 @@ import "react-datetime/css/react-datetime.css";
 import "moment/locale/da";
 import Card from "react-bootstrap/Card";
 import InputGroup from "react-bootstrap/InputGroup";
+import Script from 'next/script';
 
 // Dynamically import DateTime to disable SSR for this component
 const DateTime = dynamic(
@@ -192,7 +193,11 @@ export default function AirportPage({ code, airportName }) {
   return (
     <>
       <Head>
-        <script defer src="https://umami.waitport.com/script.js" data-website-id="25e1973f-f0c8-489c-bb41-6726ad81ca4d"></script>
+        <Script
+          src="https://umami.waitport.com/script.js"
+          data-website-id="25e1973f-f0c8-489c-bb41-6726ad81ca4d"
+          strategy="afterInteractive"
+        />
         <link rel="icon" href="/favicon.ico" />
         <title>{`Waitport - Security Queues at ${airportName}`}</title>
         <meta

@@ -4,6 +4,9 @@ import Head from 'next/head';
 import Link from 'next/link';
 import Container from 'react-bootstrap/Container';
 import 'bootstrap/dist/css/bootstrap.min.css';
+import Script from 'next/script';
+
+
 
 // Define your airports with their codes and names
 const airportNames = {
@@ -25,7 +28,11 @@ export default function Home() {
       {/* Head for SEO optimization */}
       <Head>
         <title>Waitport - Real-time & Predicted Airport Security Queues</title>
-        <script defer src="https://umami.waitport.com/script.js" data-website-id="25e1973f-f0c8-489c-bb41-6726ad81ca4d"></script>
+        <Script
+          src="https://umami.waitport.com/script.js"
+          data-website-id="25e1973f-f0c8-489c-bb41-6726ad81ca4d"
+          strategy="afterInteractive"
+        />
         <meta
           name="description"
           content="Check live and predicted security queue wait times at major European airports. Plan your trip effectively with Waitport's real-time data and future estimates."

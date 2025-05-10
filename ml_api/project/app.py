@@ -31,7 +31,7 @@ UseSupabase = 0  # If 1 then Yes, if 0 then No. Do not use Supabase for producti
 if os.environ.get("CPHAPI_HOST"):
     CPHAPI_HOST = os.environ.get("CPHAPI_HOST")
 else:
-    CPHAPI_HOST = "https://waitport.com/api/v1/all"
+    CPHAPI_HOST = "http://apisix:9080/api/v1/all"
 
 # A dictionary mapping each airport code to its local holiday calendar
 airport_holiday_map = {

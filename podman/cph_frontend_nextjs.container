@@ -1,0 +1,15 @@
+[Unit]
+Description=CPH Frontend Next.js
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=ghcr.io/simonottosen/cph-security_nextjs:main
+ContainerName=cph_frontend_nextjs
+Pod=cph-security.pod
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,18 @@
+[Unit]
+Description=PostgreSQL 17 Database
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=postgres:17
+ContainerName=cph_postgres_db
+EnvironmentFile=/root/waitport/cph-security.env
+Volume=./postgres/db:/var/lib/postgresql/data:Z
+Volume=./database/create_tables.sql:/docker-entrypoint-initdb.d/create_tables.sql:Z
+Pod=cph-security.pod
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

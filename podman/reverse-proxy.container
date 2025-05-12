@@ -1,0 +1,16 @@
+[Unit]
+Description=nginx Reverse Proxy
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=nginx:alpine
+ContainerName=reverse-proxy
+Volume=./config/reverse_proxy:/etc/nginx/conf.d:Z
+Pod=cph-security.pod
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

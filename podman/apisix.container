@@ -1,0 +1,16 @@
+[Unit]
+Description=APISIX API Gateway
+Requires=etcd.service
+After=etcd.service
+
+[Container]
+Image=apache/apisix
+ContainerName=apisix
+Volume=./config/apisix_conf/config.yaml:/usr/local/apisix/conf/config.yaml:ro
+Pod=cph-security.pod
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,16 @@
+[Unit]
+Description=CPH Frontend NextGen
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=ghcr.io/simonottosen/cph-security_frontend-nextgen:main
+ContainerName=cph_frontend_nextgen
+EnvironmentFile=/root/waitport/cph-security.env
+Pod=cph-security.pod
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=etcd Key–Value Store
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=bitnami/etcd:3.4.15
+ContainerName=etcd
+EnvironmentFile=/root/waitport/cph-security.env
+Volume=./config/etcd_data:/bitnami/etcd:Z
+Pod=cph-security.pod
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

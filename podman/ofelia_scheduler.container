@@ -1,0 +1,16 @@
+[Unit]
+Description=Ofelia Scheduler
+Requires=universal_fetchtime.service
+After=universal_fetchtime.service
+
+[Container]
+Image=mcuadros/ofelia:latest
+ContainerName=ofelia_scheduler
+Volume=/run/podman/podman.sock:/var/run/docker.sock:ro
+Exec=daemon --docker
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

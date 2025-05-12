@@ -12,6 +12,11 @@ services:
     restart: unless-stopped
     ports:
     - "80:80/tcp"
+
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     
   reverse-proxy:
     image: "nginx:alpine"

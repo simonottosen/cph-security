@@ -10,8 +10,6 @@ services:
       - ./cph/db:/var/lib/postgresql/data
       - ./database/create_tables.sql:/docker-entrypoint-initdb.d/create_tables.sql
     restart: unless-stopped
-    ports:
-    - "80:80/tcp"
 
   watchtower:
     image: containrrr/watchtower
@@ -24,6 +22,8 @@ services:
     volumes:
       - ./config/reverse_proxy:/etc/nginx/conf.d
     restart: unless-stopped
+    ports:
+    - "80:80/tcp"
 
   cph_postgrest:
     image: postgrest/postgrest

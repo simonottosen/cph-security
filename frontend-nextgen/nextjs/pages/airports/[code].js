@@ -4,16 +4,12 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import Head from "next/head";
 import dynamic from "next/dynamic";
-import Container from "react-bootstrap/Container";
-import Dropdown from "react-bootstrap/Dropdown";
-import DropdownButton from "react-bootstrap/DropdownButton";
 import Link from "next/link";
-import "bootstrap/dist/css/bootstrap.min.css";
 import "react-datetime/css/react-datetime.css";
 import "moment/locale/da";
-import Card from "react-bootstrap/Card";
-import InputGroup from "react-bootstrap/InputGroup";
 import Script from 'next/script';
+import { AreaChart } from "@tremor/react";   
+
 
 // Dynamically import DateTime to disable SSR for this component
 const DateTime = dynamic(
@@ -22,7 +18,7 @@ const DateTime = dynamic(
       .then((mod) => mod.default || mod),
   {
     ssr: false,
-    loading: () => <p>Loading date picker...</p>,
+    loading: () => <span>Loading date picker...</span>,
   }
 );
 
@@ -85,6 +81,10 @@ export default function AirportPage({ code, airportName }) {
   const [selectedDateTime, setSelectedDateTime] = useState(() => new Date(Date.now() + 2 * 60 * 60 * 1000));
   const [predictedQueueLength, setPredictedQueueLength] = useState(null);
   const [loadingPredicted, setLoadingPredicted] = useState(true);
+
+  // 6‑hour forecast data for the Tremor chart
+  const [forecastData, setForecastData] = useState([]);
+  const [loadingForecast, setLoadingForecast] = useState(true);
 
   const handleDateTimeChange = (momentObj) => {
     setSelectedDateTime(momentObj.toDate());
@@ -153,6 +153,34 @@ export default function AirportPage({ code, airportName }) {
     };
     fetchPredictedQueueLength();
   }, [code, selectedDateTime]);
+
+  // Fetch full forecast series (mean, q30, q70) for the line/area chart
+  useEffect(() => {
+    const fetchForecast = async () => {
+      try {
+        setLoadingForecast(true);
+        const response = await axios.get(
+          `http://127.0.0.1:5000/forecast/${code.toLowerCase()}`
+        );
+        const preds = response.data?.predictions ?? [];
+        const formatted = preds.map((p) => ({
+          timestamp: new Date(p.timestamp).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          mean: p.mean,
+          q30: p.q30,
+          q70: p.q70,
+        }));
+        setForecastData(formatted);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setLoadingForecast(false);
+      }
+    };
+    fetchForecast();
+  }, [code]);
 
   // Helper function for pluralization
   const formatMinutes = (minutes) => {
@@ -249,7 +277,7 @@ export default function AirportPage({ code, airportName }) {
           strategy="afterInteractive"
         />
 
-      <Container fluid="sm" className="bg-light p-5">
+      <div className="bg-gray-50 p-5">
         <header>
           <h1 className="text-center">Waitport 🛫</h1>
           <h4 className="text-center mb-5">
@@ -257,62 +285,70 @@ export default function AirportPage({ code, airportName }) {
           </h4>
         </header>
 
-        <div className="container">
+        <div className="max-w-5xl mx-auto">
 
           <section aria-labelledby="queue-overview" className="mt-4">
-            <div className="row">
-              <div className="col-lg-6 col-md-12">
-                <Card className="mb-4 shadow-sm rounded-lg">
-                  <Card.Body aria-live="polite">
-                    <Card.Title>Current Security Queue</Card.Title>
-                    {(loadingQueue || loadingAverage) ? (
-                      <p>Loading...</p>
-                    ) : (
-                      <p className="lead">
-                        The wait time at {displayName} is currently <strong>{formatMinutes(queue)}</strong>.
-                        <br />
-                        <small className="text-muted">
-                          Over the last 2 hours, the <strong>average</strong> queue has been <strong>{formatMinutes(averageQueue)}</strong>.
-                        </small>
-                      </p>
-                    )}
-                  </Card.Body>
-                </Card>
+            <div className="grid lg:grid-cols-2 gap-6">
+              <div>
+                <div className="bg-white shadow rounded-lg p-6 mb-4" aria-live="polite">
+                  <h2 className="text-xl font-semibold mb-4">Current Security Queue</h2>
+                  {(loadingQueue || loadingAverage) ? (
+                    <p>Loading...</p>
+                  ) : (
+                    <p className="text-lg">
+                      The wait time at {displayName} is currently <strong>{formatMinutes(queue)}</strong>.
+                      <br />
+                      <small className="text-muted">
+                        Over the last 2 hours, the <strong>average</strong> queue has been <strong>{formatMinutes(averageQueue)}</strong>.
+                      </small>
+                    </p>
+                  )}
+                </div>
               </div>
-              <div className="col-12 d-block d-lg-none">
-              </div>
-              <div className="col-lg-6 col-md-12">
-                <Card className="mb-4 shadow-sm rounded-lg">
-                  <Card.Body aria-live="polite">
-                    <Card.Title>Predicted Security Queue</Card.Title>
-                    {loadingPredicted ? (
-                      <p>Loading...</p>
-                    ) : (
-                      <p className="lead">
-                        We estimate <strong>{formatMinutes(predictedQueueLength)}</strong> of waiting at {displayName} {timeDiffText}.
-                      </p>
-                    )}
-                    <div className="mt-3">
-                      <h5 className="mb-2">Select Date &amp; Time</h5>
-                      <InputGroup>
-                        <InputGroup.Text id="datetime-addon" aria-label="calendar icon">📅</InputGroup.Text>
-                        <DateTime
-                          locale="da-dk"
-                          inputProps={{
-                            id: "datetime-picker",
-                            "aria-label": "Select Date and Time",
-                            className: "form-control"
-                          }}
-                          dateFormat="MM/DD"
-                          timeFormat="HH:mm"
-                          closeOnSelect={true}
-                          value={selectedDateTime}
-                          onChange={handleDateTimeChange}
-                        />
-                      </InputGroup>
+              <div>
+                <div className="bg-white shadow rounded-lg p-6 mb-4" aria-live="polite">
+                  <h2 className="text-xl font-semibold mb-4">Predicted Security Queue</h2>
+                  {loadingPredicted ? (
+                    <p>Loading...</p>
+                  ) : (
+                    <p className="text-lg">
+                      We estimate <strong>{formatMinutes(predictedQueueLength)}</strong> of waiting at {displayName} {timeDiffText}.
+                    </p>
+                  )}
+                  <div className="mt-3">
+                    <h5 className="mb-2">Select Date &amp; Time</h5>
+                    <div className="flex items-center space-x-2">
+                      <span id="datetime-addon" aria-label="calendar icon">📅</span>
+                      <DateTime
+                        locale="da-dk"
+                        inputProps={{
+                          id: "datetime-picker",
+                          "aria-label": "Select Date and Time",
+                          className: "w-full border rounded px-3 py-2"
+                        }}
+                        dateFormat="MM/DD"
+                        timeFormat="HH:mm"
+                        closeOnSelect={true}
+                        value={selectedDateTime}
+                        onChange={handleDateTimeChange}
+                      />
                     </div>
-                  </Card.Body>
-                </Card>
+                  </div>
+                  {loadingForecast ? (
+                    <p className="mt-4">Loading forecast...</p>
+                  ) : (
+                    <AreaChart
+                      className="h-72 mt-4"
+                      data={forecastData}
+                      index="timestamp"
+                      categories={["q70", "q30", "mean"]}
+                      colors={["sky", "sky", "indigo"]}
+                      stack={false}
+                      showLegend={false}
+                      valueFormatter={(v) => `${Math.round(v)} min`}
+                    />
+                  )}
+                </div>
               </div>
             </div>
           </section>
@@ -320,54 +356,52 @@ export default function AirportPage({ code, airportName }) {
           <hr className="my-4" />
 
           <section aria-labelledby="about-waitport">
-            <div className="row justify-content-start">
-              <div className="col-12">
-                <h2 id="about-waitport" className="mb-3">
-                  About Waitport
-                </h2>
-                <p className="lead">
-                  Welcome to <strong>Waitport</strong>! Here, you can track
-                  security waiting times across major European airports in
-                  real-time. We also provide conservative queue{" "}
-                  <strong>predictions</strong> for future dates and times. This
-                  helps you plan your trip more effectively and avoid unexpected
-                  delays.
-                  <br />
-                  <br />
-                  Start by selecting an airport below, then choose a date and
-                  time for your expected travel to see our predicted queue.{" "}
-                  <span role="img" aria-label="globe">
-                    🌏
-                  </span>
-                  <br />
-                  <br />
-                  Safe travels!
-                </p>
-              </div>
+            <div>
+              <h2 id="about-waitport" className="mb-3">
+                About Waitport
+              </h2>
+              <p className="text-lg">
+                Welcome to <strong>Waitport</strong>! Here, you can track
+                security waiting times across major European airports in
+                real-time. We also provide conservative queue{" "}
+                <strong>predictions</strong> for future dates and times. This
+                helps you plan your trip more effectively and avoid unexpected
+                delays.
+                <br />
+                <br />
+                Start by selecting an airport below, then choose a date and
+                time for your expected travel to see our predicted queue.{" "}
+                <span role="img" aria-label="globe">
+                  🌏
+                </span>
+                <br />
+                <br />
+                Safe travels!
+              </p>
             </div>
           </section>
           <hr className="my-4" />
 
           <section aria-labelledby="select-airport">
-            <div className="row">
-              <div className="col-lg-4 col-sm-6">
+            <div className="grid lg:grid-cols-2 gap-6">
+              <div>
                 <h2 id="select-airport" className="mb-3">
                   Select another airport
                 </h2>
-                <DropdownButton
-                  id="airport-select"
-                  title={airportName}
-                  onSelect={(eventKey) => {
-                    window.location.href = `/airports/${eventKey}`;
+                <select
+                  className="mt-2 block w-full rounded border-gray-300 p-2"
+                  value={code}
+                  onChange={(e) => {
+                    window.location.href = `/airports/${e.target.value}`;
                   }}
-                  aria-label="Select Airport Dropdown"
+                  aria-label="Select Airport"
                 >
-                  {Object.entries(airportNames).map(([code, name]) => (
-                    <Dropdown.Item key={code} eventKey={code}>
+                  {Object.entries(airportNames).map(([c, name]) => (
+                    <option key={c} value={c}>
                       {name}
-                    </Dropdown.Item>
+                    </option>
                   ))}
-                </DropdownButton>
+                </select>
               </div>
             </div>
           </section>
@@ -375,31 +409,31 @@ export default function AirportPage({ code, airportName }) {
           <div className="b-example-divider"></div>
 
           <footer className="py-3 my-4">
-            <ul className="nav justify-content-center border-bottom pb-3 mb-3">
-              <li className="nav-item">
+            <ul className="flex justify-center border-b pb-3 mb-3">
+              <li>
                 <a
                   href="https://simonottosen.dk/"
-                  className="nav-link px-2 text-muted"
+                  className="mx-2 text-gray-600 hover:text-gray-800"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
                   Other Projects
                 </a>
               </li>
-              <li className="nav-item">
+              <li>
                 <a
                   href="https://waitport.com/api/v1/all?order=id.desc&limit=100"
-                  className="nav-link px-2 text-muted"
+                  className="mx-2 text-gray-600 hover:text-gray-800"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
                   API Documentation
                 </a>
               </li>
-              <li className="nav-item">
+              <li>
                 <a
                   href="https://github.com/simonottosen/cph-security"
-                  className="nav-link px-2 text-muted"
+                  className="mx-2 text-gray-600 hover:text-gray-800"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -419,7 +453,7 @@ export default function AirportPage({ code, airportName }) {
             </p>
           </footer>
         </div>
-      </Container>
+      </div>
     </>
   );
 }

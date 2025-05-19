@@ -1,5 +1,5 @@
 // pages/_app.js
-import 'bootstrap/dist/css/bootstrap.min.css';
+import "tailwindcss";
 import 'react-datetime/css/react-datetime.css';
 import 'moment/locale/da'; // Import moment locale globally
 

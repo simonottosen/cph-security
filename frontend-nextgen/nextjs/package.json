@@ -11,19 +11,27 @@
         "start": "next start"
     },
     "dependencies": {
+        "@headlessui/react": "^2.2.3",
+        "@remixicon/react": "^4.6.0",
+        "@tailwindcss/postcss": "^4.1.7",
+        "@tremor/react": "^3.18.7",
+        "autoprefixer": "^10.4.16",
         "axios": "^1.9.0",
-        "bootstrap": "^5.3.6",
-        "jquery": "^3.7.1",
+        "clsx": "^2.1.1",
+        "geist": "^1.4.2",
         "moment": "^2.30.1",
         "next": "15.3.2",
         "next-sitemap": "^4.2.3",
-        "popper.js": "^1.16.1",
+        "postcss": "^8.5.3",
         "react": "19.1.0",
-        "react-bootstrap": "^2.10.9",
         "react-datetime": "^3.3.1",
-        "react-dom": "19.1.0"
+        "react-dom": "19.1.0",
+        "tailwind-merge": "^3.3.0",
+        "tailwind-variants": "^1.0.0",
+        "tailwindcss": "^4.1.7"
     },
     "devDependencies": {
+        "@tailwindcss/forms": "^0.5.10",
         "@testing-library/jest-dom": "^6.6.3",
         "@testing-library/react": "^16.3.0",
         "eslint": "^9.26.0",

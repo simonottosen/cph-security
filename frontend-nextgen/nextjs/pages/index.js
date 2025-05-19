@@ -2,8 +2,6 @@
 
 import Head from 'next/head';
 import Link from 'next/link';
-import Container from 'react-bootstrap/Container';
-import 'bootstrap/dist/css/bootstrap.min.css';
 import Script from 'next/script';
 
 
@@ -66,16 +64,16 @@ export default function Home() {
           strategy="afterInteractive"
         />
 
-      <Container fluid="sm" className="bg-light p-5">
+      <div className="bg-gray-50 p-5">
         <h1 className="text-center">Waitport 🛫</h1>
         <h4 className="text-center mb-5">Real-Time & Predicted Airport Security Queues</h4>
 
-        <div className="container">
+        <div className="max-w-5xl mx-auto">
           {/* About Section */}
-          <div className="row justify-content-center">
-            <div className="col-12">
+          <div className="flex justify-center">
+            <div className="w-full">
               <h2 className="mb-3">About Waitport</h2>
-              <p className="lead">
+              <p className="text-lg">
                 Welcome to <strong>Waitport</strong>! Here, you can track security waiting times across major European airports in real-time.
                 We also provide conservative queue <strong>predictions</strong> for future dates and times. This helps you plan your trip more effectively and avoid unexpected delays.
                 <br /><br />
@@ -88,12 +86,12 @@ export default function Home() {
           </div>
 
           {/* Airport Selection Section */}
-          <div className="row justify-content-center">
-            <div className="col-12">
+          <div className="flex justify-center">
+            <div className="w-full">
               <h2 className="mb-3">Select Airport</h2>
-              <ul className="list-group">
+              <ul className="divide-y divide-gray-200 border rounded">
                 {Object.entries(airportNames).map(([code, name]) => (
-                  <li key={code} className="list-group-item">
+                  <li key={code} className="p-3 hover:bg-gray-100">
                     <Link href={`/airports/${code}`} className="text-decoration-none">
                       {name}
                     </Link>
@@ -106,16 +104,16 @@ export default function Home() {
           {/* Optional: Additional Content or Features */}
           {/* You can add more sections here as needed */}
 
-          <div className="b-example-divider"></div>
+          {/* Removed Bootstrap divider demo element */}
 
           {/* Footer Section */}
-          <div className="container">
+          <div className="max-w-5xl mx-auto">
             <footer className="py-3 my-4">
-              <ul className="nav justify-content-center border-bottom pb-3 mb-3">
+              <ul className="flex justify-center border-b pb-3 mb-3">
                 <li className="nav-item">
                   <a
                     href="https://simonottosen.dk/"
-                    className="nav-link px-2 text-muted"
+                    className="mx-2 text-gray-600 hover:text-gray-800"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -125,7 +123,7 @@ export default function Home() {
                 <li className="nav-item">
                   <a
                     href="https://waitport.com/api/v1/all?order=id.desc&limit=100"
-                    className="nav-link px-2 text-muted"
+                    className="mx-2 text-gray-600 hover:text-gray-800"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -135,7 +133,7 @@ export default function Home() {
                 <li className="nav-item">
                   <a
                     href="https://github.com/simonottosen/cph-security"
-                    className="nav-link px-2 text-muted"
+                    className="mx-2 text-gray-600 hover:text-gray-800"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -149,7 +147,7 @@ export default function Home() {
             </footer>
           </div>
         </div>
-      </Container>
+      </div>
     </>
   );
 }

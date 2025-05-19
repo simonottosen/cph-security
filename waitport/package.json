@@ -14,9 +14,9 @@
     "@tremor/react": "^3.18.7",
     "axios": "^1.9.0",
     "next": "14.2.20",
-    "react": "^18",
+    "react": "18.2.0",
     "react-datetime": "^3.3.1",
-    "react-dom": "^18"
+    "react-dom": "18.2.0"
   },
   "devDependencies": {
     "@tailwindcss/forms": "^0.5.10",
@@ -28,5 +28,9 @@
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "typescript": "^5"
+  },
+  "overrides": {
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
   }
 }

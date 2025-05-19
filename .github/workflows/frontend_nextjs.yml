@@ -39,7 +39,7 @@ jobs:
       with:
         context: ./waitport/
         push: true
-        file: ./waitport/
+        file: ./waitport
         platforms: linux/amd64
         tags: |
           ${{ env.REGISTRY }}/${{ env.NEXTJS_NAME }}:latest

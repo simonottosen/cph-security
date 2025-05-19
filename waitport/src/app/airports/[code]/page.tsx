@@ -121,7 +121,7 @@ const ClientPage: React.FC = () => {
       try {
         setLoadingForecast(true);
         const res = await axios.get<{ predictions: any[] }>(
-          `https://waitport.com/api/v1/autogluon/forecast/${code}`,
+          `https://waitport.com/api/v1/forecast/${code}`,
         );
         const formatted =
           res.data.predictions?.map(p => ({

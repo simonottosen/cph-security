@@ -124,15 +124,20 @@ const ClientPage: React.FC = () => {
           `https://waitport.com/api/v1/forecast/${code}`,
         );
         const formatted =
-          res.data.predictions?.map(p => ({
-            timestamp: new Date(p.timestamp).toLocaleTimeString([], {
+          res.data.predictions?.map(p => {
+            const date = new Date(p.timestamp);
+            date.setHours(date.getHours() + 2);
+            const time = date.toLocaleTimeString([], {
               hour: '2-digit',
               minute: '2-digit',
-            }),
-            mean: p.mean,
-            q30: p.q30,
-            q70: p.q70,
-          })) ?? [];
+            });
+            return {
+              timestamp: time,
+              Average: p.mean,
+              Low: p.q30,
+              High: p.q70,
+            };
+          }) ?? [];
         setForecastData(formatted);
       } finally {
         setLoadingForecast(false);
@@ -266,10 +271,10 @@ const ClientPage: React.FC = () => {
                     className="h-60 mt-6"
                     data={forecastData}
                     index="timestamp"
-                    categories={['q70', 'q30', 'mean']}
-                    colors={['indigo', 'indigo', 'indigo']}
+                    categories={['High', 'Average']}
+                    colors={['indigo', 'green']}
                     stack={false}
-                    showLegend={false}
+                    showLegend={true}
                     curveType="monotone"
                     valueFormatter={v => `${Math.round(v as number)} min`}
                   />

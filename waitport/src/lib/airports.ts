@@ -17,9 +17,9 @@ export type AirportCode =
 export interface ForecastPoint {
   /** Timestamp in ISO format or any string parseable by Date */
   timestamp: string;
-  mean: number;
-  q30: number;
-  q70: number;
+  Average: number;
+  Low: number;
+  High: number;
 }
 
 /** Queue length at a specific time */

@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autogluon-api-deployment
+spec:
+  selector:
+    matchLabels:
+      app: autogluon-api
+  replicas: 3 # tells deployment to run 2 pods matching the template
+  template:
+    metadata:
+      labels:
+        app: autogluon-api
+    spec:
+      containers:
+      - name: autogluon-api
+        image: ghcr.io/simonottosen/cph-security_autogluon_api:arm64-latest
+        ports:
+        - containerPort: 5000
+        imagePullPolicy: "Always"
+        env:
+        - name: CPHAPI_HOST
+          value: "https://autogluonapi.simonottosen.dk"
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: autogluon-api
+  labels:
+    app: autogluon-api
+spec:
+  selector:
+    app: autogluon-api
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 5000
+  type: ClusterIP
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: autogluon-api
+  annotations:
+    ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: autogluon-api
+            port:
+              number: 80

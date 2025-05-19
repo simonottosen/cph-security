@@ -176,3 +176,12 @@ services:
       SUPABASE_EMAIL: ${SUPABASE_EMAIL}
       SUPABASE_PASSWORD: ${SUPABASE_PASSWORD}
     restart: unless-stopped
+
+
+  autogluon:
+    image: "ghcr.io/simonottosen/cph-security_autogluon:main"
+    container_name: "autogluon"
+    environment:
+      CPHAPI_HOST: ${CPHAPI_HOST}
+    restart: unless-stopped
+

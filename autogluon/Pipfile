@@ -1,0 +1,23 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[requires]
+python_version = "3.12"
+
+[packages]
+pandas = "*"
+numpy = "*"
+scikit-learn = "*"
+python-dateutil = "*"
+holidays = "*"
+flask = "*"
+apscheduler = "*"
+autogluon = {version = "*", extras = ["timeseries"]}
+python-dotenv = "*"
+
+[dev-packages]
+
+[scripts]
+start = "python project/app.py"

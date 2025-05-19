@@ -146,3 +146,5 @@ frontend-nextgen/node_modules/.bin/acorn
 .env
 Miniconda3-latest-MacOSX-x86_64.sh
 ml_api/project/chronos_bolt_base/learner.pkl
+autogluon/project/models
+ml_api/project/models

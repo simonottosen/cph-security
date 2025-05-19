@@ -55,7 +55,7 @@ def _train_airport(code, df_raw):
     df_code = df_code.dropna(subset=['queue'])
     df_code = df_code[['queue']].groupby(level=0).mean()
     # Resample and reset index without duplicate timestamp conflict
-    tmp_resampled = df_code.resample('15min', origin='start_day').ffill()
+    tmp_resampled = df_code.resample('5min', origin='start_day').ffill()
     tmp_resampled.index.name = None
     df_resampled = tmp_resampled.reset_index().rename(columns={'index': 'timestamp'})
     # Holidays
@@ -147,7 +147,7 @@ def _train_airport(code, df_raw):
     start=time.time()
     airport_path=os.path.join(MODEL_PATH,code)
     os.makedirs(airport_path,exist_ok=True)
-    predictor=TimeSeriesPredictor(path=airport_path,prediction_length=prediction_length,target='queue',freq='15min',verbosity=0,log_to_file=False).fit(train_data=train_data,hyperparameters={'Chronos': [{'model_path': 'bolt_base'}]},enable_ensemble=False,time_limit=300)
+    predictor=TimeSeriesPredictor(path=airport_path,prediction_length=prediction_length,target='queue',freq='5min',verbosity=0,log_to_file=False).fit(train_data=train_data,hyperparameters={'Chronos': [{'model_path': 'bolt_base'}]},enable_ensemble=False,time_limit=300)
     duration=time.time()-start
     predictor.persist()
     # Metrics
@@ -161,29 +161,33 @@ def _train_airport(code, df_raw):
     else:
         try: perf_records=perf.reset_index().to_dict(orient='records')
         except Exception: perf_records=[{'raw_performance':perf}]
-    # Forecast
-    preds=predictor.predict(train_data); y_pred=preds.loc[code]; y_test=test_data.loc[code]['queue'].loc[y_pred.index]
-    df_pred_code=y_pred.reset_index().rename(columns={'timestamp':'timestamp','mean':'mean','0.3':'q30','0.7':'q70'})
-    df_pred_code['timestamp']=df_pred_code['timestamp'].dt.strftime('%Y-%m-%dT%H:%M:%S')
-    df_actual_code=y_test.reset_index().rename(columns={'queue':'actual'})
-    df_actual_code['timestamp']=df_actual_code['timestamp'].dt.strftime('%Y-%m-%dT%H:%M:%S')
-    df_actual_code['smoothed']=df_actual_code['actual'].rolling(window=3,center=True).mean()
-    return code, df_pred_code.to_dict(orient='records'), df_actual_code.to_dict(orient='records'), {'total_time_seconds':duration,'last_trained':datetime.datetime.now().isoformat(),'model_performance':perf_records}
+    # Forecast 6 hours (24 × 15‑min) ahead from the latest timestamp
+    preds = predictor.predict(ts_df)
+    y_pred = preds.loc[code]
+
+    df_pred_code = y_pred.reset_index().rename(
+        columns={'timestamp': 'timestamp', 'mean': 'mean', '0.3': 'q30', '0.7': 'q70'}
+    )
+    df_pred_code['timestamp'] = df_pred_code['timestamp'].dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    return code, df_pred_code.to_dict(orient='records'), {
+        'total_time_seconds': duration,
+        'last_trained': datetime.datetime.now().isoformat(),
+        'model_performance': perf_records
+    }
 
 # Placeholder for latest training metrics
 train_metrics = {}
 
 # Containers for per-airport forecasts and metrics
 df_preds = {}
-df_actuals = {}
 
 app = Flask(__name__)
 
 def retrain():
-    global df_preds, df_actuals, train_metrics
+    global df_preds, train_metrics
     # Clear previous run data
     df_preds.clear()
-    df_actuals.clear()
     train_metrics.clear()
     # Load data from API
     response = requests.get(CPHAPI_HOST)
@@ -195,9 +199,8 @@ def retrain():
         for future in as_completed(futures):
             code = futures[future]
             try:
-                code, pred_records, actual_records, metrics = future.result()
+                code, pred_records, metrics = future.result()
                 df_preds[code] = pred_records
-                df_actuals[code] = actual_records
                 train_metrics[code] = metrics
             except Exception as e:
                 logger.error(f"Error training airport {code}: {e}")
@@ -215,8 +218,7 @@ def get_forecast(airport):
     if code not in VALID_AIRPORTS:
         return jsonify({'error': f'Invalid airport code: {airport}'}), 404
     return jsonify({
-        'predictions': df_preds.get(code, []),
-        'actual_smoothed': df_actuals.get(code, [])
+        'predictions': df_preds.get(code, [])
     })
 
 

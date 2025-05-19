@@ -28,11 +28,6 @@ export default function Home() {
       {/* Head for SEO optimization */}
       <Head>
         <title>Waitport - Real-time & Predicted Airport Security Queues</title>
-        <Script
-          src="https://umami.waitport.com/script.js"
-          data-website-id="25e1973f-f0c8-489c-bb41-6726ad81ca4d"
-          strategy="afterInteractive"
-        />
         <meta
           name="description"
           content="Check live and predicted security queue wait times at major European airports. Plan your trip effectively with Waitport's real-time data and future estimates."
@@ -65,6 +60,11 @@ export default function Home() {
           }}
         />
       </Head>
+        <Script
+          src="https://umami.waitport.com/script.js"
+          data-website-id="25e1973f-f0c8-489c-bb41-6726ad81ca4d"
+          strategy="afterInteractive"
+        />
 
       <Container fluid="sm" className="bg-light p-5">
         <h1 className="text-center">Waitport 🛫</h1>

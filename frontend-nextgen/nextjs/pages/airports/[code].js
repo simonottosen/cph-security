@@ -193,11 +193,6 @@ export default function AirportPage({ code, airportName }) {
   return (
     <>
       <Head>
-        <Script
-          src="https://umami.waitport.com/script.js"
-          data-website-id="25e1973f-f0c8-489c-bb41-6726ad81ca4d"
-          strategy="afterInteractive"
-        />
         <link rel="icon" href="/favicon.ico" />
         <title>{`Waitport - Security Queues at ${airportName}`}</title>
         <meta
@@ -248,6 +243,11 @@ export default function AirportPage({ code, airportName }) {
           }}
         />
       </Head>
+        <Script
+          src="https://umami.waitport.com/script.js"
+          data-website-id="25e1973f-f0c8-489c-bb41-6726ad81ca4d"
+          strategy="afterInteractive"
+        />
 
       <Container fluid="sm" className="bg-light p-5">
         <header>

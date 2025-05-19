@@ -1,7 +1,7 @@
+/* eslint-disable @next/next/no-head-import-in-app-directory */
 'use client';
 
 import "./globals.css";
-import React from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import Script from 'next/script';
@@ -112,9 +112,7 @@ const Home: React.FC = () => {
                 <br />
                 Select an airport below to see the current and predicted security
                 queue times.{' '}
-                <span role="img" aria-label="globe">
-                  🌏
-                </span>
+                queue times. <span role="img" aria-label="globe">🌏</span>
                 <br />
                 <br />
                 Safe travels!
@@ -178,11 +176,7 @@ const Home: React.FC = () => {
               </li>
             </ul>
             <p className="text-center text-sm text-gray-500 dark:text-gray-400">
-              Made with{' '}
-              <span role="img" aria-label="heart">
-                ❤️
-              </span>{' '}
-              by Simon Ottosen
+              Made with <span role="img" aria-label="heart">❤️</span> by Simon Ottosen
             </p>
           </footer>
         </div>

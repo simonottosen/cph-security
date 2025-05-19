@@ -20,55 +20,12 @@ const DateTime = dynamic(() => import('react-datetime').then(mod => mod.default 
 /* Types and constants that we also export so the server wrapper       */
 /* can use them.                                                      */
 /* ------------------------------------------------------------------ */
-export type AirportCode =
-  | 'cph'
-  | 'osl'
-  | 'arn'
-  | 'dus'
-  | 'fra'
-  | 'muc'
-  | 'lhr'
-  | 'ams'
-  | 'dub'
-  | 'ist';
-
-interface ForecastPoint {
-  timestamp: string;
-  mean: number;
-  q30: number;
-  q70: number;
-}
-
-interface QueuePoint {
-  time: string;
-  queue: number;
-}
-
-export const airportNames: Record<AirportCode, string> = {
-  cph: '🇩🇰 Copenhagen Airport',
-  osl: '🇳🇴 Oslo Airport',
-  arn: '🇸🇪 Stockholm Airport',
-  dus: '🇩🇪 Düsseldorf Airport',
-  fra: '🇩🇪 Frankfurt Airport',
-  muc: '🇩🇪 Munich Airport',
-  lhr: '🇬🇧 London Heathrow Airport',
-  ams: '🇳🇱 Amsterdam Airport',
-  dub: '🇮🇪 Dublin Airport',
-  ist: '🇹🇷 Istanbul Airport',
-};
-
-const airportNamesText: Record<AirportCode, string> = {
-  cph: 'Copenhagen Airport',
-  osl: 'Oslo Airport',
-  arn: 'Stockholm Airport',
-  dus: 'Düsseldorf Airport',
-  fra: 'Frankfurt Airport',
-  muc: 'Munich Airport',
-  lhr: 'London Heathrow Airport',
-  ams: 'Amsterdam Airport',
-  dub: 'Dublin Airport',
-  ist: 'Istanbul Airport',
-};
+import {
+  AirportCode,
+  ForecastPoint,
+  QueuePoint,
+  airportNames,
+} from '@/lib/airports';
 
 const API_URL = process.env.NEXT_PUBLIC_API_HOST || '/api/v1/predict';
 
@@ -78,10 +35,11 @@ const API_URL = process.env.NEXT_PUBLIC_API_HOST || '/api/v1/predict';
 import { useParams } from 'next/navigation';
 
 const ClientPage: React.FC = () => {
-  const { code } = useParams() as { code: AirportCode };
-  if (!code) return null; // safety
+  const params = useParams() as { code?: string };
+  // Fallback to "cph" so hooks always run in the same order
+  const code = (params.code ?? 'cph') as AirportCode;
+
   const airportName = airportNames[code];
-  const displayName = airportNamesText[code] ?? airportName;
 
   /* -------------------- STATE -------------------- */
   const [queue, setQueue] = useState<number | null>(null);
@@ -243,7 +201,7 @@ const ClientPage: React.FC = () => {
                       <Text className="mt-2 text-gray-500">now</Text>
                     </Flex>
                     <Text className="mt-1 text-gray-500">
-                      Avgerage in the last&nbsp;2 hours: <span className="font-semibold">{formatMinutes(averageQueue)}</span>
+                      Average in the last&nbsp;2 hours: <span className="font-semibold">{formatMinutes(averageQueue)}</span>
                     </Text>
                     {queueSeries.length > 0 && (
                       <AreaChart
@@ -297,7 +255,6 @@ const ClientPage: React.FC = () => {
                     timeFormat="HH:mm"
                     closeOnSelect
                     value={selectedDateTime}
-                    onChange={(m: any) => setSelectedDateTime(m.toDate())}
                   />
                 </div>
 

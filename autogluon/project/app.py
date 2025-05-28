@@ -11,10 +11,12 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import datetime
 import os
 import time
+import gc
 import requests
 import logging
+import multiprocessing as mp
 from dotenv import load_dotenv
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 load_dotenv()
 
@@ -170,6 +172,10 @@ def _train_airport(code, df_raw):
     )
     df_pred_code['timestamp'] = df_pred_code['timestamp'].dt.strftime('%Y-%m-%dT%H:%M:%S')
 
+    # Free AutoGluon resources held in this worker
+    del predictor
+    gc.collect()
+
     return code, df_pred_code.to_dict(orient='records'), {
         'total_time_seconds': duration,
         'last_trained': datetime.datetime.now().isoformat(),
@@ -194,7 +200,7 @@ def retrain():
     response.raise_for_status()
     df_raw = pd.DataFrame(response.json())
     # Parallel training for each airport
-    with ThreadPoolExecutor(max_workers=min(len(VALID_AIRPORTS), os.cpu_count() or 1)) as executor:
+    with ProcessPoolExecutor(max_workers=min(len(VALID_AIRPORTS), os.cpu_count() or 1)) as executor:
         futures = {executor.submit(_train_airport, code, df_raw): code for code in VALID_AIRPORTS}
         for future in as_completed(futures):
             code = futures[future]
@@ -205,11 +211,7 @@ def retrain():
             except Exception as e:
                 logger.error(f"Error training airport {code}: {e}")
 
-# Initial training and scheduler setup
-retrain()
-scheduler = BackgroundScheduler()
-scheduler.add_job(func=retrain, trigger='interval', hours=4)
-scheduler.start()
+# Scheduler will be started from the main guard below to avoid multiprocessing‑spawn recursion
 
 # Dynamic per-airport forecast endpoint
 @app.route('/forecast/<airport>', methods=['GET'])
@@ -229,4 +231,11 @@ def get_metrics():
     return jsonify(train_metrics)
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+    mp.freeze_support()  # Good practice on Windows; harmless on *nix
+    retrain()            # First full training pass
+
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(func=retrain, trigger='interval', hours=4)
+    scheduler.start()
+
+    app.run(host='0.0.0.0')

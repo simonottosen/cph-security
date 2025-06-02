@@ -28,18 +28,7 @@ jobs:
         working-directory: ./autogluon
         run: |
           python -m pip install --upgrade pip
-          pip install pipenv
-          if [ -f Pipfile ]; then
-            echo "Generating requirements.txt from Pipfile..."
-            pipenv lock -r > requirements.txt
-            pip install -r requirements.txt
-          elif [ -f requirements.txt ]; then
-            echo "Installing deps from list"
-            pip install "pandas>=0" "numpy>=0" "scikit-learn>=0" "python-dateutil>=0" "holidays>=0" "flask>=0" "apscheduler>=0" "autogluon[timeseries]>=0" "python-dotenv>=0" "pytest>=0" 
-          fi
-          # Make sure pytest is available
-          pip install pytest
-
+          pip install "pandas>=0" "numpy>=0" "scikit-learn>=0" "python-dateutil>=0" "holidays>=0" "flask>=0" "apscheduler>=0" "autogluon[timeseries]>=0" "python-dotenv>=0" "pytest>=0" 
       - name: Run pytest
         working-directory: ./autogluon
         run: pytest -q

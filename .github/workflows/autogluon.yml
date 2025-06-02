@@ -27,13 +27,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
-          # Install extras if defined
-          if [ -f setup.py ] || [ -f pyproject.toml ]; then
-            pip install ".[dev,test]" || true
-          fi
+          # Install pipenv so we can use the Pipfile
+          pip install pipenv
+          # Install dev + default packages into the system environment
+          pipenv install --dev --system --deploy
+          # Ensure pytest itself is present (typically already via dev deps)
           pip install pytest
 
       - name: Run pytest

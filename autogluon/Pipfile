@@ -16,6 +16,8 @@ flask = "*"
 apscheduler = "*"
 autogluon = {version = "*", extras = ["timeseries"]}
 python-dotenv = "*"
+pytest = "*"
+
 
 [dev-packages]
 

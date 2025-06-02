@@ -12,6 +12,8 @@ import gzip
 import io
 import http.client
 
+from typing import Optional
+
 
 # This function performs a healthcheck.
 def healthcheck_perform(HEALTHCHECK):
@@ -69,6 +71,47 @@ def database_write(queue, timestamp, airport):
 
             
     return database_write_result
+
+# ---------------------------------------------------------------------------
+#                    Common post‑processing helper
+# ---------------------------------------------------------------------------
+def process_airport_result(
+    queue: int,
+    airport: str,
+    healthcheck_id: str,
+    timestamp: Optional[str] = None,
+) -> None:
+    """
+    Centralised post‑processing for every airport function.
+
+    It writes results to Postgres, Firebase and Supabase, pings the
+    health‑check endpoint and reports a concise summary to stdout.
+
+    Parameters
+    ----------
+    queue : int
+        Waiting time in minutes.
+    airport : str
+        Three‑letter IATA airport code.
+    healthcheck_id : str
+        HealthChecks.io ping ID, or ``"NULL"`` to skip the ping.
+    timestamp : str, optional
+        ISO‑8601 timestamp.  If omitted, the current UTC time is used.
+    """
+    if timestamp is None:
+        timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+
+    database_status = database_write(queue, timestamp, airport)
+    firebase_status = firebase_write(airport)
+    supabase_status = supabase_write(queue, timestamp, airport)
+    healthcheck_status = healthcheck_perform(healthcheck_id)
+
+    print(
+        f"Airport {airport} was completed with the following status. "
+        f"Database: {database_status}. Firebase: {firebase_status}. "
+        f"Supabase: {supabase_status}. Healthcheck: {healthcheck_status}. "
+        f"Queue is {queue} at {timestamp}"
+    )
 
 def supabase_write(queue, timestamp, airport):
     url: str = os.environ.get("SUPABASE_URL")
@@ -146,18 +189,7 @@ def munich():
             else:
                 print("Error: Information not found in the JSON data.")
     
-    # Get current UTC datetime and format as string
-    now_utc = datetime.utcnow()
-    timestamp = now_utc.strftime('%Y-%m-%dT%H:%M:%S')
-    
-    # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
-    database_write_status = database_write(queue, timestamp, airport)
-    firebase_write_status = firebase_write(airport)
-    supabase_write_status = supabase_write(queue, timestamp, airport)
-    healthcheck_perform_status = healthcheck_perform(healthcheck)
-    
-    # Print a completion message with the status results from the three previous function calls
-    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Supabase: "+str(supabase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+    process_airport_result(queue, airport, healthcheck)
 
 
 
@@ -178,18 +210,7 @@ def istanbul():
         queue = numbers   # Assign a value to queue
     else:
         print("Error: Information not found in the JSON data.")
-    # Get current UTC datetime and format as string
-    now_utc = datetime.utcnow()
-    timestamp = now_utc.strftime('%Y-%m-%dT%H:%M:%S')
-    
-    # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
-    database_write_status = database_write(queue, timestamp, airport)
-    firebase_write_status = firebase_write(airport)
-    supabase_write_status = supabase_write(queue, timestamp, airport)
-    healthcheck_perform_status = healthcheck_perform(healthcheck)
-    
-    # Print a completion message with the status results from the three previous function calls
-    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Supabase: "+str(supabase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+    process_airport_result(queue, airport, healthcheck)
 
 
 def heathrow():
@@ -219,18 +240,7 @@ def heathrow():
                     queue = numbers   # Assign a value to queue
                 else:
                     print("Error: Information not found in the JSON data.")
-    # Get current UTC datetime and format as string
-    now_utc = datetime.utcnow()
-    timestamp = now_utc.strftime('%Y-%m-%dT%H:%M:%S')
-    
-    # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
-    database_write_status = database_write(queue, timestamp, airport)
-    firebase_write_status = firebase_write(airport)
-    supabase_write_status = supabase_write(queue, timestamp, airport)
-    healthcheck_perform_status = healthcheck_perform(healthcheck)
-    
-    # Print a completion message with the status results from the three previous function calls
-    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Supabase: "+str(supabase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+    process_airport_result(queue, airport, healthcheck)
 
 # This function retrieves the waiting time at Frankfurt airport
 def frankfurt():
@@ -258,18 +268,7 @@ def frankfurt():
     else:
         print("Error: Information not found in the JSON data.")
     
-    # Get current UTC datetime and format as string
-    now_utc = datetime.utcnow()
-    timestamp = now_utc.strftime('%Y-%m-%dT%H:%M:%S')
-    
-    # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
-    database_write_status = database_write(queue, timestamp, airport)
-    firebase_write_status = firebase_write(airport)
-    supabase_write_status = supabase_write(queue, timestamp, airport)
-    healthcheck_perform_status = healthcheck_perform(healthcheck)
-    
-    # Print a completion message with the status results from the three previous function calls
-    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Supabase: "+str(supabase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+    process_airport_result(queue, airport, healthcheck)
 
 # This function retrieves the waiting time at Dusseldorf airport
 def dusseldorf():
@@ -296,18 +295,7 @@ def dusseldorf():
     if queue is None:
         print("Error: Value of 'queue' was not set. Message from website was ", waitingtime)
     else:
-        # Get current UTC datetime and format as string
-        now_utc = datetime.utcnow()
-        timestamp = now_utc.strftime('%Y-%m-%dT%H:%M:%S')
-        
-        # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
-        database_write_status = database_write(queue, timestamp, airport)
-        firebase_write_status = firebase_write(airport)
-        supabase_write_status = supabase_write(queue, timestamp, airport)
-        healthcheck_perform_status = healthcheck_perform(healthcheck)
-        
-        # Print a completion message with the status results from the three previous function calls
-        print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Supabase: "+str(supabase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+        process_airport_result(queue, airport, healthcheck)
 
 # This function retrieves the waiting time at Copenhagen airport
 def copenhagen():
@@ -335,14 +323,7 @@ def copenhagen():
     queue = int(round(average))
     timestamp = (waitingtime["deliveryId"])
 
-    # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
-    database_write_status = database_write(queue, timestamp, airport)
-    firebase_write_status = firebase_write(airport)
-    supabase_write_status = supabase_write(queue, timestamp, airport)
-    healthcheck_perform_status = healthcheck_perform(healthcheck)
-    
-    # Print a completion message with the status results from the three previous function calls
-    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Supabase: "+str(supabase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+    process_airport_result(queue, airport, healthcheck, timestamp)
 
 # This function retrieves the waiting time at Arlanda airport
 def arlanda():
@@ -366,18 +347,7 @@ def arlanda():
     else:
         print("Error: Could not get waitingtime for Arlanda.")
     
-    # Get current UTC datetime and format as string
-    now_utc = datetime.utcnow()
-    timestamp = now_utc.strftime('%Y-%m-%dT%H:%M:%S')
-    
-    # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
-    database_write_status = database_write(queue, timestamp, airport)
-    firebase_write_status = firebase_write(airport)
-    supabase_write_status = supabase_write(queue, timestamp, airport)
-    healthcheck_perform_status = healthcheck_perform(healthcheck)
-    
-    # Print a completion message with the status results from the three previous function calls
-    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Supabase: "+str(supabase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+    process_airport_result(queue, airport, healthcheck)
 
 # This function retrieves the waiting time at Dublin airport
 def dublin():
@@ -402,18 +372,7 @@ def dublin():
     else:
         print("Waiting time not found for Dublin Airport.")
     
-    # Get current UTC datetime and format as string
-    now_utc = datetime.utcnow()
-    timestamp = now_utc.strftime('%Y-%m-%dT%H:%M:%S')
-    
-    # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
-    database_write_status = database_write(queue, timestamp, airport)
-    firebase_write_status = firebase_write(airport)
-    supabase_write_status = supabase_write(queue, timestamp, airport)
-    healthcheck_perform_status = healthcheck_perform(healthcheck)
-    
-    # Print a completion message with the status results from the three previous function calls
-    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Supabase: "+str(supabase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+    process_airport_result(queue, airport, healthcheck)
 
 
 
@@ -438,18 +397,7 @@ def oslo():
     else:
         print("Waiting time not found in the JSON data.")
     
-    # Get current UTC datetime and format as string
-    now_utc = datetime.utcnow()
-    timestamp = now_utc.strftime('%Y-%m-%dT%H:%M:%S')
-    
-    # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
-    database_write_status = database_write(queue, timestamp, airport)
-    firebase_write_status = firebase_write(airport)
-    supabase_write_status = supabase_write(queue, timestamp, airport)
-    healthcheck_perform_status = healthcheck_perform(healthcheck)
-    
-    # Print a completion message with the status results from the three previous function calls
-    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Supabase: "+str(supabase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+    process_airport_result(queue, airport, healthcheck)
 
 
 # # This function retrieves the waiting time at Berlin airport. Currently removed as BER has blocked the server.
@@ -512,16 +460,5 @@ def amsterdam():
     else:
         print("Waiting time not found for Schipol.")
     
-    # Get current UTC datetime and format as string
-    now_utc = datetime.utcnow()
-    timestamp = now_utc.strftime('%Y-%m-%dT%H:%M:%S')
-    
-    # Call three other functions to write the retrieved waiting time data to a database, firebase, and to perform a healthcheck. Store the result of each function into corresponding variables
-    database_write_status = database_write(queue, timestamp, airport)
-    firebase_write_status = firebase_write(airport)
-    supabase_write_status = supabase_write(queue, timestamp, airport)
-    healthcheck_perform_status = healthcheck_perform(healthcheck)
-    
-    # Print a completion message with the status results from the three previous function calls
-    print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Supabase: "+str(supabase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
+    process_airport_result(queue, airport, healthcheck)
 

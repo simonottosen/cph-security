@@ -30,8 +30,9 @@ jobs:
           python -m pip install --upgrade pip
           # Install pipenv so we can use the Pipfile
           pip install pipenv
+          pipenv lock
           # Install dev + default packages into the system environment
-          pipenv install --dev --system --deploy
+          pipenv install --system --dev
           # Ensure pytest itself is present (typically already via dev deps)
           pip install pytest
 

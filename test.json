@@ -1,0 +1,173 @@
+# ----------------------------------------
+# Traefik dynamic configuration
+# (file provider watching /etc/traefik/dynamic/main.yaml)
+# ----------------------------------------
+
+http:
+  # ─────── MIDDLEWARES ─────────────────────────────────
+  middlewares:
+    # (1) A simple redirect from HTTP → HTTPS
+    redirect-to-https:
+      redirectScheme:
+        scheme: "https"
+        permanent: true
+
+    # (2) (OPTIONAL) You may keep your Cloudflare and GeoBlock definitions here for other routers,
+    # but notice we will NOT attach them to jupyter & homepage.
+    cloudflare:
+      plugin:
+        cloudflare:
+          trustedCIDRs: []
+          overwriteRequestHeader: true
+
+    geoblock:
+      plugin:
+        geoblock:
+          blackListMode: false
+          countries:
+            - "DK"
+          allowLocalRequests: true
+          allowUnknownCountries: false
+          httpStatusCodeDeniedRequest: 403
+          ipGeolocationHttpHeaderField: "cf-ipcountry"
+          xForwardedForReverseProxy: true
+          api: "https://get.geojs.io/v1/ip/country/{ip}"
+          apiTimeoutMs: 750
+          cacheSize: 15
+          forceMonthlyUpdate: true
+          silentStartUp: false
+          addCountryHeader: true
+
+  # ─────── ROUTERS ─────────────────────────────────────
+  routers:
+    # ─── Catch-all HTTP → HTTPS redirect ───────────────
+    # This router listens on entryPoint "web" (port 80) and redirects every Host(*) to HTTPS.
+    http-catchall:
+      entryPoints:
+        - "web"
+      rule: "HostRegexp(`{host:.+}`)"
+      middlewares:
+        - "redirect-to-https"
+      service: "dummy-service"    # this will never actually serve content
+
+    # ─── jupyter.simonottosen.dk (HTTPS only) ──────────
+    jupyter-router:
+      entryPoints:
+        - "websecure"
+      rule: "Host(`jupyter.simonottosen.dk`)"
+      service: jupyter-service
+      # No Cloudflare/GeoBlock middleware here!
+      tls:
+        certResolver: "dnsresolver"
+        # (Optional) You could enforce only TLS 1.2+ by adding:
+        # options: "default"   # or your own TLS options if you defined them
+
+    pfsense-router:
+      entryPoints:
+        - "websecure"
+      rule: "Host(`pfsense.simonottosen.dk`)"
+      service: pfsense-service
+      # No Cloudflare/GeoBlock middleware here!
+      tls:
+        certResolver: "dnsresolver"
+
+    komodo-router:
+      entryPoints:
+        - "websecure"
+      rule: "Host(`komodo.simonottosen.dk`)"
+      service: komodo-service
+      # No Cloudflare/GeoBlock middleware here!
+      tls:
+        certResolver: "dnsresolver"
+
+    proxmox-router:
+      entryPoints:
+        - "websecure"
+      rule: "Host(`proxmox.simonottosen.dk`)"
+      service: proxmox-service
+      # No Cloudflare/GeoBlock middleware here!
+      tls:
+        certResolver: "dnsresolver"
+
+    homeassistant-router:
+      entryPoints:
+        - "websecure"
+      rule: "Host(`ha.simonottosen.dk`)"
+      service: homeassistant-service
+      # No Cloudflare/GeoBlock middleware here!
+      tls:
+        certResolver: "dnsresolver"
+
+    # ─── homepage.simonottosen.dk (HTTPS only) ─────────
+    homepage-router:
+      entryPoints:
+        - "websecure"
+      rule: "Host(`homepage.simonottosen.dk`)"
+      service: homepage-service
+      # No Cloudflare/GeoBlock middleware here!
+      tls:
+        certResolver: "dnsresolver"
+
+    torrent-router:
+      entryPoints:
+        - "websecure"
+      rule: "Host(`torrent.simonottosen.dk`)"
+      service: torrent-service
+      tls:
+        certResolver: "dnsresolver"
+
+    jellyseerr-router:
+      entryPoints:
+        - "web"
+      rule: "Host(`addmovie.simonottosen.dk`)"
+      service: jellyseerr-service
+      middlewares:
+        - "geoblock"
+
+  # ─────── SERVICES ────────────────────────────────────
+  services:
+    # (dummy service to satisfy the redirect router; it never really serves)
+    dummy-service:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:9999"  # unused
+
+    jupyter-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.51:8888"
+
+    homepage-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.101:3000"
+
+    torrent-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.171:8090"
+
+    jellyseerr-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.103:5055"
+
+    pfsense-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.1"
+
+    komodo-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.50:9120"
+          
+    proxmox-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.10:8006"
+
+    homeassistant-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.53:8123"

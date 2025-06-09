@@ -90,9 +90,7 @@ function App() {
   let airportName;
   if (selectedAirport === 'cph') {
     airportName = 'Copenhagen Airport';
-  } else if (selectedAirport === 'osl') {
-    airportName = 'Oslo Airport';
-  } else if (selectedAirport === 'arn') {
+  }  else if (selectedAirport === 'arn') {
     airportName = 'Stockholm Airport';
   } else if (selectedAirport === 'dus') {
     airportName = 'Düsseldorf Airport';
@@ -174,7 +172,6 @@ function App() {
                 onSelect={handleAirportChange}
               >
                 <Dropdown.Item eventKey="cph">🇩🇰 Copenhagen Airport</Dropdown.Item>
-                <Dropdown.Item eventKey="osl">🇳🇴 Oslo Gardermoen Airport</Dropdown.Item>
                 <Dropdown.Item eventKey="arn">🇸🇪 Stockholm Arlanda Airport</Dropdown.Item>
                 <Dropdown.Item eventKey="dus">🇩🇪 Düsseldorf International Airport</Dropdown.Item>
                 <Dropdown.Item eventKey="fra">🇩🇪 Frankfurt Airport</Dropdown.Item>

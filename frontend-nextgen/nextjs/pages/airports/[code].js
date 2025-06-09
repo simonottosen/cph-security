@@ -27,7 +27,6 @@ const API_URL = process.env.NEXT_PUBLIC_API_HOST || "/api/v1/predict";
 // Define your airports with their codes and names
 const airportNames = {
   cph: "🇩🇰 Copenhagen Airport",
-  osl: "🇳🇴 Oslo Airport",
   arn: "🇸🇪 Stockholm Airport",
   dus: "🇩🇪 Düsseldorf Airport",
   fra: "🇩🇪 Frankfurt Airport",
@@ -40,7 +39,6 @@ const airportNames = {
 
 const airportNamesText = {
   cph: "Copenhagen Airport",
-  osl: "Oslo Airport",
   arn: "Stockholm Airport",
   dus: "Düsseldorf Airport",
   fra: "Frankfurt Airport",

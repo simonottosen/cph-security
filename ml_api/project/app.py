@@ -44,7 +44,6 @@ airport_holiday_map = {
     'IST': holidays.Turkey(),
     'LHR': holidays.UnitedKingdom(),
     'MUC': holidays.Germany(),
-    'OSL': holidays.Norway(),
 }
 
 # Valid airports for reference
@@ -99,7 +98,7 @@ def get_data_via_local_database() -> pd.DataFrame:
     start_time_load_data = time.time()
     
     # List of airports
-    airports = ["CPH", "OSL", "ARN", "DUS", "FRA", "MUC", "LHR", "AMS", "DUB", "IST"]
+    airports = ["CPH", "ARN", "DUS", "FRA", "MUC", "LHR", "AMS", "DUB", "IST"]
     
     dfs = []
     for airport_code in airports:
@@ -135,7 +134,7 @@ def get_data_via_local_database_light() -> pd.DataFrame:
     start_time_utc = end_time_utc - timedelta(days=num_days)
     start_time_str = start_time_utc.isoformat()  # e.g. 2025-02-03T12:34:56.789123
 
-    airports = ["CPH", "OSL", "ARN", "DUS", "FRA", "MUC", "LHR", "AMS", "DUB", "IST"]
+    airports = ["CPH", "ARN", "DUS", "FRA", "MUC", "LHR", "AMS", "DUB", "IST"]
     
     dfs = []
     for airport_code in airports:

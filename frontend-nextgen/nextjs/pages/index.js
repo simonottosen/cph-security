@@ -9,7 +9,6 @@ import Script from 'next/script';
 // Define your airports with their codes and names
 const airportNames = {
     cph: '🇩🇰 Copenhagen Airport',
-    osl: '🇳🇴 Oslo Airport',
     arn: '🇸🇪 Stockholm Airport',
     dus: '🇩🇪 Düsseldorf Airport',
     fra: '🇩🇪 Frankfurt Airport',

@@ -13,7 +13,7 @@
     "@remixicon/react": "^4.6.0",
     "@tremor/react": "^3.18.7",
     "axios": "^1.9.0",
-    "next": "14.2.20",
+    "next": "14.2.30",
     "react": "18.2.0",
     "react-datetime": "^3.3.1",
     "react-dom": "18.2.0"

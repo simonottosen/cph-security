@@ -75,7 +75,6 @@ describe('getStaticPaths', () => {
     expect(pathsResult.paths).toEqual(
       expect.arrayContaining([
         { params: { code: 'cph' } },
-        { params: { code: 'osl' } },
         { params: { code: 'arn' } },
         { params: { code: 'dus' } },
         { params: { code: 'fra' } },

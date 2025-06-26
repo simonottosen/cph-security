@@ -308,29 +308,29 @@ def copenhagen():
     resp.raise_for_status()
     data = resp.json()
 
-    # Extract raw strings (or None)
+    # Raw strings (or None if missing)
     t2_raw = data.get("t2WaitingTimeInterval")
     t3_raw = data.get("t3WaitingTimeInterval")
 
-    # Helper to parse "min-max" → [min, max]
-    def parse_interval(interval_str):
-        parts = interval_str.split("-")
-        return [int(re.search(r"\d+", p).group()) for p in parts]
+    # Parse any string like "10-15", "> 20 min", "< 5", etc. → list of ints
+    def parse_interval(s: str) -> list[int]:
+        nums = re.findall(r"\d+", s)
+        return [int(n) for n in nums]
 
-    # Build lists of ints (empty if missing)
+    # Build lists (empty if that terminal is missing)
     t2_times = parse_interval(t2_raw) if t2_raw else []
     t3_times = parse_interval(t3_raw) if t3_raw else []
 
-    # If neither terminal has data, fail
+    # Fail if neither terminal has data
     if not t2_times and not t3_times:
         raise RuntimeError("No waiting-time data available for Terminal 2 or Terminal 3")
 
-    # Combine whatever is available
-    combined = t2_times + t3_times
-    average = sum(combined) / len(combined)
+    # Compute average over whatever values we got
+    all_times = t2_times + t3_times
+    average = sum(all_times) / len(all_times)
     queue = int(round(average))
 
-    # Use deliveryId as timestamp if present, else now
+    # Use deliveryId timestamp if present, otherwise now
     timestamp = data.get("deliveryId") or datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
 
     # Final reporting

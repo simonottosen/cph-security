@@ -299,32 +299,43 @@ def dusseldorf():
 
 # This function retrieves the waiting time at Copenhagen airport
 def copenhagen():
-    # Define initial values
-    healthcheck = os.environ.get("CPH_HEALTHCHECK") 
+    healthcheck = os.environ.get("CPH_HEALTHCHECK")
     airport = "CPH"
-    airport_api = "https://cphwaitingtime.z6.web.core.windows.net/waitingtime.json"
-    
-    # Use requests module to send a GET request to the airport API and retrieve waiting time information as JSON
-    response = requests.get(airport_api)
-    waitingtime = json.loads(response.text)
-    t2_waiting_time_interval = waitingtime.get("t2WaitingTimeInterval")
-    t3_waiting_time_interval = waitingtime.get("t3WaitingTimeInterval")
-    
-    # Split the values using '-' as the delimiter
-    t2_waiting_time_interval = t2_waiting_time_interval.split("-")
-    t3_waiting_time_interval = t3_waiting_time_interval.split("-")
-    
-    # Convert the split values to integers
-    t2_waiting_time_interval = [int(x) for x in t2_waiting_time_interval]
-    t3_waiting_time_interval = [int(x) for x in t3_waiting_time_interval]
-    
-    # Calculate the average
-    average = (sum(t2_waiting_time_interval) + sum(t3_waiting_time_interval)) / (len(t2_waiting_time_interval) + len(t3_waiting_time_interval))
+    api_url = "https://cphwaitingtime.z6.web.core.windows.net/waitingtime.json"
+
+    # Fetch data
+    resp = requests.get(api_url)
+    resp.raise_for_status()
+    data = resp.json()
+
+    # Extract raw strings (or None)
+    t2_raw = data.get("t2WaitingTimeInterval")
+    t3_raw = data.get("t3WaitingTimeInterval")
+
+    # Helper to parse "min-max" → [min, max]
+    def parse_interval(interval_str):
+        parts = interval_str.split("-")
+        return [int(re.search(r"\d+", p).group()) for p in parts]
+
+    # Build lists of ints (empty if missing)
+    t2_times = parse_interval(t2_raw) if t2_raw else []
+    t3_times = parse_interval(t3_raw) if t3_raw else []
+
+    # If neither terminal has data, fail
+    if not t2_times and not t3_times:
+        raise RuntimeError("No waiting-time data available for Terminal 2 or Terminal 3")
+
+    # Combine whatever is available
+    combined = t2_times + t3_times
+    average = sum(combined) / len(combined)
     queue = int(round(average))
-    timestamp = (waitingtime["deliveryId"])
 
+    # Use deliveryId as timestamp if present, else now
+    timestamp = data.get("deliveryId") or datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+
+    # Final reporting
     process_airport_result(queue, airport, healthcheck, timestamp)
-
+    
 # This function retrieves the waiting time at Arlanda airport
 def arlanda():
     # Define initial values

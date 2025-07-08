@@ -284,8 +284,8 @@ def dusseldorf():
     
     # Loop through data in the waiting time JSON until you find the relevant security checkpoint waiting time
     for item in waitingtime['data']:
-        # check if the name in the current item equals 'Sicherheitskontrolle A'
-        if item['name'] == 'Sicherheitskontrolle A':
+        # check if the name in the current item equals 'Security control A'
+        if item['name'] == 'Security control A':
             numbers = item['waitingTime']
             if isinstance(numbers, int):
                 queue = numbers   # Assign a value to queue

@@ -179,7 +179,7 @@ def munich():
     waitingtime = json.loads(response.text)
     
     for datas in waitingtime["queueTimes"]["current"]:
-        if datas["queueId"] == "T2_Abflug_SIKO":
+        if datas["queueId"] == "T2_Abflug_SIKO_ECO_NORD":
             numbers = datas["projectedWaitTime"]
             if numbers < 0 or numbers == 0.0:
                 numbers = numbers = 0

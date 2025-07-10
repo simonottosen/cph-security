@@ -275,7 +275,7 @@ def dusseldorf():
     # Define initial values
     healthcheck = os.environ.get("DUS_HEALTHCHECK") 
     airport = "DUS"
-    airport_api = "https://www.dus.com/api/sitecore/flightapi/WaitingTimes?lang=en"
+    airport_api = "https://www.dus.com/api/sitecore/flightapi/WaitingTimes"
     headers = {"X-Requested-With": "XMLHttpRequest"}
 
     # Use requests module to send a GET request to the airport API and retrieve waiting time information as JSON
@@ -284,8 +284,8 @@ def dusseldorf():
     
     # Loop through data in the waiting time JSON until you find the relevant security checkpoint waiting time
     for item in waitingtime['data']:
-        # check if the name in the current item equals 'Security control A'
-        if item['name'] == 'Security control A':
+        # check if the name in the current item equals 'Sicherheitskontrolle A'
+        if item['name'] == 'Sicherheitskontrolle A':
             numbers = item['waitingTime']
             if isinstance(numbers, int):
                 queue = numbers   # Assign a value to queue

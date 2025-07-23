@@ -16,6 +16,7 @@ setup(
                 "lhr-fetch=app.app:heathrow",
                 "muc-fetch=app.app:munich",
                 "ist-fetch=app.app:istanbul",
+                "edi-fetch=app.app:edinburgh",
                 "dub-fetch=app.app:dublin"
             ]
         }

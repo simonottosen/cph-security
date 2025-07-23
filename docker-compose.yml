@@ -103,6 +103,8 @@ services:
       - "ofelia.job-exec.muc.command=muc-fetch"
       - "ofelia.job-exec.ist.schedule=@every 5m"
       - "ofelia.job-exec.ist.command=ist-fetch"
+      - "ofelia.job-exec.edi.schedule=@every 5m"
+      - "ofelia.job-exec.edi.command=edi-fetch"
 
   ofelia:
     container_name: "ofelia_scheduler"

@@ -385,7 +385,35 @@ def dublin():
     
     process_airport_result(queue, airport, healthcheck)
 
+def edinburgh():
+    # Environment variable for your Healthchecks ping URL
+    healthcheck = os.environ.get("EDI_HEALTHCHECK")
+    airport = "EDI"
+    airport_api = "https://blip-api.edinburghairport.com/blip-api/blip?version=2"
 
+    try:
+        # Call the BLIP endpoint (keep a short timeout so your worker doesn’t hang)
+        response = requests.get(airport_api, timeout=5)
+        response.raise_for_status()            # raises on 4xx/5xx
+        data = response.json()                 # → {'queue': 217, 'minutes': 4, ...}
+
+        # Grab the “minutes” value – that’s the live wait-time indicator
+        queue = data.get("minutes")
+        if queue is None:
+            print("Waiting time not found for Edinburgh Airport.")
+            return
+
+        # Normalise anything funky coming back from the API
+        if queue < 0:
+            queue = 0
+
+    except (requests.RequestException, ValueError) as err:
+        # Any network / JSON parsing issue ends up here
+        print(f"Error retrieving wait time for Edinburgh Airport: {err}")
+        return
+
+    # Re-use your existing post-processing function
+    process_airport_result(queue, airport, healthcheck)
 
 
 # This function retrieves the waiting time at Oslo airport

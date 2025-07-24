@@ -39,6 +39,7 @@ airport_holiday_map = {
     'FRA': holidays.Germany(),
     'IST': holidays.Turkey(),
     'LHR': holidays.UnitedKingdom(),
+    'EDI': holidays.UnitedKingdom(),
     'MUC': holidays.Germany(),
     'OSL': holidays.Norway(),
 }

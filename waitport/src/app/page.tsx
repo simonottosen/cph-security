@@ -9,7 +9,7 @@ import Script from 'next/script';
 // Define TypeScript type for airport codes
 type AirportCode =
   | 'cph'
-  | 'osl'
+  | 'edi'
   | 'arn'
   | 'dus'
   | 'fra'
@@ -22,7 +22,7 @@ type AirportCode =
 // Map airport codes to their display names
 const airportNames: Record<AirportCode, string> = {
   cph: '🇩🇰 Copenhagen Airport',
-  osl: '🇳🇴 Oslo Airport',
+  edi: '🏴󠁧󠁢󠁳󠁣󠁴󠁿 Edinburgh Airport',
   arn: '🇸🇪 Stockholm Airport',
   dus: '🇩🇪 Düsseldorf Airport',
   fra: '🇩🇪 Frankfurt Airport',

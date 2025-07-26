@@ -3,7 +3,7 @@
 /** A union of all supported airport codes */
 export type AirportCode =
   | 'cph'
-  | 'osl'
+  | 'edi'
   | 'arn'
   | 'dus'
   | 'fra'
@@ -32,7 +32,7 @@ export interface QueuePoint {
 /** Display names (with flag emojis) keyed by code */
 export const airportNames: Record<AirportCode, string> = {
   cph: '🇩🇰 Copenhagen Airport',
-  osl: '🇳🇴 Oslo Airport',
+  edi: '🏴󠁧󠁢󠁳󠁣󠁴󠁿 Edinburgh Airport',
   arn: '🇸🇪 Stockholm Airport',
   dus: '🇩🇪 Düsseldorf Airport',
   fra: '🇩🇪 Frankfurt Airport',
@@ -46,7 +46,7 @@ export const airportNames: Record<AirportCode, string> = {
 /** Plain text names (no emoji) keyed by code */
 export const airportNamesText: Record<AirportCode, string> = {
   cph: 'Copenhagen Airport',
-  osl: 'Oslo Airport',
+  edi: 'Edinburgh Airport',
   arn: 'Stockholm Airport',
   dus: 'Düsseldorf Airport',
   fra: 'Frankfurt Airport',

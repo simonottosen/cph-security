@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Flight offers</title>
+
+  <!-- Quick styling via Bootstrap CDN -->
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+
+<body class="bg-light">
+  <div class="container py-4">
+
+    <h1 class="mb-4">
+      Flight offers <small class="text-muted">({{ offers|length }})</small>
+    </h1>
+
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered align-middle">
+        <thead class="table-dark text-center">
+          <tr>
+            <th>#</th>
+            <th>Origin</th>
+            <th>Destination</th>
+            <th>Airline</th>
+            <th>Flight</th>
+            <th>Seats</th>
+            <th>Price</th>
+            <th>Departure&nbsp;(local)</th>
+          </tr>
+        </thead>
+
+        <tbody class="text-center">
+        {% for o in offers %}
+          <tr>
+            <td>{{ o.num }}</td>
+            <td>{{ o.origin }}</td>
+            <td>{{ o.destination }}</td>
+            <td>{{ o.airline }}</td>
+            <td>{{ o.flight }}</td>
+            <td>{{ o.seats }}</td>
+            <td>{{ o.price }}&nbsp;{{ o.currency }}</td>
+            <td>{{ o.time_iso|timenice }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</body>
+</html>

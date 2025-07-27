@@ -105,7 +105,7 @@ const Home: React.FC = () => {
               <p className="text-lg">
                 Welcome to <strong>Waitport</strong>! Here, you can track security
                 waiting times across major European airports in real-time. We also
-                provide conservative queue <strong>predictions</strong> for future
+                provide conservative <strong> security queue predictions</strong> for future
                 dates and times. This helps you plan your trip more effectively and
                 avoid unexpected delays.
                 <br />

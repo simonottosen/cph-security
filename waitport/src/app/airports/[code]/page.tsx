@@ -6,7 +6,9 @@ import Head from 'next/head';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import Script from 'next/script';
-import { Card, Title, Text, Metric, Flex, Grid, AreaChart } from '@tremor/react';
+// Tremor Raw components (Tailwind v4)
+import { Card } from "@/components/Card";
+import { AreaChart } from "@/components/AreaChart";
 import 'react-datetime/css/react-datetime.css';
 import 'moment/locale/da';
 
@@ -174,7 +176,7 @@ const ClientPage: React.FC = () => {
       />
 
       {/* -------------- PAGE LAYOUT -------------- */}
-      <div className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+      <div className="min-h-screen flex flex-col bg-linear-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
         {/* Header */}
         <header className="py-6 text-center">
           <Link href="/" className="inline-block">
@@ -191,23 +193,23 @@ const ClientPage: React.FC = () => {
         <main className="flex-1 w-full max-w-6xl mx-auto px-6">
           {/* Queue overview */}
           <section className="mt-4">
-            <Grid numItemsMd={2} numItemsLg={2} className="gap-6">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2">
               {/* Current queue */}
               <Card className="shadow-sm ring-1 ring-gray-200 dark:ring-gray-700 dark:bg-gray-900/50 rounded-lg">
-                <Title className="text-lg md:text-xl font-semibold text-gray-800 dark:text-gray-100 mb-2">
+                <h3 className="text-lg md:text-xl font-semibold text-gray-800 dark:text-gray-100 mb-2">
                   Current queue
-                </Title>
+                </h3>
                 {loadingQueue || loadingAverage ? (
-                  <Text>Loading…</Text>
+                  <p>Loading…</p>
                 ) : (
                   <>
-                    <Flex justifyContent="start" className="space-x-2 mt-4">
-                      <Metric>{formatMinutes(queue)}</Metric>
-                      <Text className="mt-2 text-gray-500">now</Text>
-                    </Flex>
-                    <Text className="mt-1 text-gray-500">
+                    <div className="flex items-center space-x-2 mt-4">
+                      <p className="text-3xl font-bold text-gray-800 dark:text-gray-100">{formatMinutes(queue)}</p>
+                      <p className="mt-2 text-gray-500">now</p>
+                    </div>
+                    <p className="mt-1 text-gray-500">
                       Average in the last&nbsp;2 hours: <span className="font-semibold">{formatMinutes(averageQueue)}</span>
-                    </Text>
+                    </p>
                     {queueSeries.length > 0 && (
                       <AreaChart
                         className="h-48 mt-6"
@@ -218,9 +220,7 @@ const ClientPage: React.FC = () => {
                         }))}
                         index="time"
                         categories={['Queue', 'Average']}
-                        colors={['indigo', 'gray']}
-                        curveType="monotone"
-                        stack={false}
+                        colors={['blue', 'gray']}
                         showLegend={false}
                         valueFormatter={v => `${v as number} min`}
                       />
@@ -231,15 +231,15 @@ const ClientPage: React.FC = () => {
 
               {/* Prediction */}
               <Card className="shadow-sm ring-1 ring-gray-200 dark:ring-gray-700 dark:bg-gray-900/50 rounded-lg">
-                <Title className="text-lg md:text-xl font-semibold text-gray-800 dark:text-gray-100 mb-2">
+                <h3 className="text-lg md:text-xl font-semibold text-gray-800 dark:text-gray-100 mb-2">
                   Prediction
-                </Title>
+                </h3>
                 {loadingPredicted ? (
-                  <Text>Loading…</Text>
+                  <p>Loading…</p>
                 ) : (
                   <>
-                    <Metric>{formatMinutes(predictedQueueLength)}</Metric>
-                    <Text className="mt-2 text-gray-500">{timeDiffText}</Text>
+                    <p className="text-3xl font-bold text-gray-800 dark:text-gray-100">{formatMinutes(predictedQueueLength)}</p>
+                    <p className="mt-2 text-gray-500">{timeDiffText}</p>
                   </>
                 )}
 
@@ -265,22 +265,20 @@ const ClientPage: React.FC = () => {
 
                 {/* Forecast chart */}
                 {loadingForecast ? (
-                  <Text className="mt-4">Loading forecast…</Text>
+                  <p className="mt-4">Loading forecast…</p>
                 ) : (
                   <AreaChart
                     className="h-60 mt-6"
                     data={forecastData}
                     index="timestamp"
                     categories={['High', 'Average']}
-                    colors={['indigo', 'green']}
-                    stack={false}
+                    colors={['blue', 'gray']}
                     showLegend={true}
-                    curveType="monotone"
                     valueFormatter={v => `${Math.round(v as number)} min`}
                   />
                 )}
               </Card>
-            </Grid>
+            </div>
           </section>
 
           {/* Select another airport */}

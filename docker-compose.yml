@@ -182,7 +182,7 @@ services:
 
 
   autogluon:
-    image: "ghcr.io/simonottosen/cph-security_autogluon:main"
+    image: "ghcr.io/simonottosen/cph-security_autogluon:latest"
     container_name: "autogluon"
     environment:
       CPHAPI_HOST: ${CPHAPI_HOST}

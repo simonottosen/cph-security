@@ -50,6 +50,17 @@ const ClientPage: React.FC = () => {
   const [predictedQueueLength, setPredictedQueueLength] = useState<number | null>(null);
   const [loadingPredicted, setLoadingPredicted] = useState(true);
 
+  const [historical, setHistorical] = useState<{
+    yesterday: number | null;
+    month: number | null;
+    year: number | null;
+  }>({
+    yesterday: null,
+    month: null,
+    year: null,
+  });
+  const [loadingHistorical, setLoadingHistorical] = useState(true);
+
   const [forecastData, setForecastData] = useState<ForecastPoint[]>([]);
   const [loadingForecast, setLoadingForecast] = useState(true);
 
@@ -95,6 +106,39 @@ const ClientPage: React.FC = () => {
       }
     };
     fetchAverage();
+  }, [code]);
+
+  useEffect(() => {
+    const fetchHistorical = async () => {
+      try {
+        setLoadingHistorical(true);
+        const now = new Date();
+        const targets = [
+          { key: 'yesterday', date: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+          { key: 'month', date: new Date(new Date(now).setMonth(now.getMonth() - 1)) },
+          { key: 'year', date: new Date(new Date(now).setFullYear(now.getFullYear() - 1)) },
+        ] as const;
+
+        const results: Record<string, number | null> = {};
+        for (const t of targets) {
+          const iso = t.date.toISOString();
+          const res = await axios.get<{ queue: number }[]>(
+            `https://waitport.com/api/v1/all?airport=eq.${code.toUpperCase()}&timestamp=lte.${iso}&select=queue&order=timestamp.desc&limit=1`,
+          );
+          results[t.key] = res.data[0]?.queue ?? null;
+        }
+
+        setHistorical({
+          yesterday: results['yesterday'],
+          month: results['month'],
+          year: results['year'],
+        });
+      } finally {
+        setLoadingHistorical(false);
+      }
+    };
+
+    fetchHistorical();
   }, [code]);
 
   useEffect(() => {
@@ -190,12 +234,15 @@ const ClientPage: React.FC = () => {
         <main className="flex-1 w-full max-w-6xl mx-auto px-6">
           {/* Queue overview */}
           <section className="mt-4">
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2">
+            <div className="grid gap-6 lg:gap-4 md:grid-cols-2 lg:grid-cols-3">
               {/* Current queue */}
               <Card className="shadow-sm ring-1 ring-gray-200 dark:ring-gray-700 dark:bg-gray-900/50 rounded-lg">
                 <h3 className="text-lg md:text-xl font-semibold text-gray-800 dark:text-gray-100 mb-2">
                   Current queue
                 </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                  Live security‑queue wait time, updated every few minutes.
+                </p>
                 {loadingQueue || loadingAverage ? (
                   <p>Loading…</p>
                 ) : (
@@ -231,6 +278,9 @@ const ClientPage: React.FC = () => {
                 <h3 className="text-lg md:text-xl font-semibold text-gray-800 dark:text-gray-100 mb-2">
                   Prediction
                 </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                  Estimated wait time for the date&nbsp;&amp;&nbsp;time you pick below.
+                </p>
                 {loadingPredicted ? (
                   <p>Loading…</p>
                 ) : (
@@ -266,6 +316,10 @@ const ClientPage: React.FC = () => {
                     The predicted queue length refers to this exact date&nbsp;&amp;&nbsp;time.
                   </p>
                 </div>
+                <div className="border-t border-gray-200 dark:border-gray-700 my-6" />
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Expected queue over the next&nbsp;6&nbsp;hours
+                </p>
 
                 {/* Forecast chart */}
                 {loadingForecast ? (
@@ -280,6 +334,48 @@ const ClientPage: React.FC = () => {
                     showLegend={true}
                     valueFormatter={v => `${Math.round(v as number)} min`}
                   />
+                )}
+              </Card>
+
+              {/* Historical */}
+              <Card className="shadow-sm ring-1 ring-gray-200 dark:ring-gray-700 dark:bg-gray-900/50 rounded-lg">
+                <h3 className="text-lg md:text-xl font-semibold text-gray-800 dark:text-gray-100 mb-2">
+                  Historical
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                  What the queue looked like at roughly this time yesterday, one&nbsp;month ago, and one&nbsp;year ago.
+                </p>
+                {loadingHistorical ? (
+                  <p>Loading…</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {/* Yesterday */}
+                    <span className="inline-flex w-48 items-center whitespace-nowrap justify-between gap-2 rounded-md bg-blue-100 dark:bg-blue-900 py-1 pl-2.5 pr-2 text-sm text-gray-800 dark:text-gray-200 ring-1 ring-inset ring-blue-200 dark:ring-blue-800">
+                      Yesterday
+                      <span className="h-4 w-px bg-blue-300 dark:bg-blue-700" />
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        {formatMinutes(historical.yesterday)}
+                      </span>
+                    </span>
+
+                    {/* One month ago */}
+                    <span className="inline-flex w-48 items-center whitespace-nowrap justify-between gap-2 rounded-md bg-blue-100 dark:bg-blue-900 py-1 pl-2.5 pr-2 text-sm text-gray-800 dark:text-gray-200 ring-1 ring-inset ring-blue-200 dark:ring-blue-800">
+                      1&nbsp;month&nbsp;ago
+                      <span className="h-4 w-px bg-blue-300 dark:bg-blue-700" />
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        {formatMinutes(historical.month)}
+                      </span>
+                    </span>
+
+                    {/* One year ago */}
+                    <span className="inline-flex w-48 items-center whitespace-nowrap justify-between gap-2 rounded-md bg-blue-100 dark:bg-blue-900 py-1 pl-2.5 pr-2 text-sm text-gray-800 dark:text-gray-200 ring-1 ring-inset ring-blue-200 dark:ring-blue-800">
+                      1&nbsp;year&nbsp;ago
+                      <span className="h-4 w-px bg-blue-300 dark:bg-blue-700" />
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        {formatMinutes(historical.year)}
+                      </span>
+                    </span>
+                  </div>
                 )}
               </Card>
             </div>

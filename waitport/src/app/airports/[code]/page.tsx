@@ -63,6 +63,7 @@ const ClientPage: React.FC = () => {
 
   const [forecastData, setForecastData] = useState<ForecastPoint[]>([]);
   const [loadingForecast, setLoadingForecast] = useState(true);
+  const [forecastHorizon, setForecastHorizon] = useState<number | null>(null);
 
   const [queueSeries, setQueueSeries] = useState<QueuePoint[]>([]);
 
@@ -141,19 +142,41 @@ const ClientPage: React.FC = () => {
     fetchHistorical();
   }, [code]);
 
-  useEffect(() => {
+useEffect(() => {
     const fetchPrediction = async () => {
       try {
         setLoadingPredicted(true);
-        const iso = selectedDateTime.toISOString().slice(0, 16);
-        const res = await axios.get<{ predicted_queue_length_minutes: number }>(
-          `https://waitport.com${API_URL}?timestamp=${iso}&airport=${code}`,
+
+        // Try to derive prediction from the richer /forecast endpoint first
+        const forecastRes = await axios.get<{ predictions: { timestamp: string; mean: number }[] }>(
+          `https://waitport.com/api/v1/forecast/${code}`,
         );
-        setPredictedQueueLength(res.data.predicted_queue_length_minutes ?? 0);
+
+        const targetTime = selectedDateTime.getTime();
+        const toleranceMs = 15 * 60 * 1000; // 15‑minute window
+
+        const match = forecastRes.data.predictions?.find(p => {
+          const tLocal = new Date(p.timestamp);
+          tLocal.setHours(tLocal.getHours() + 2); // shift to CPH
+          return Math.abs(tLocal.getTime() - targetTime) <= toleranceMs;
+        });
+
+        if (match && typeof match.mean === 'number') {
+          // Use the forecast value if it's within the time window
+          setPredictedQueueLength(Math.round(match.mean));
+        } else {
+          // Fall back to the original /predict endpoint
+          const iso = selectedDateTime.toISOString().slice(0, 16);
+          const res = await axios.get<{ predicted_queue_length_minutes: number }>(
+            `https://waitport.com${API_URL}?timestamp=${iso}&airport=${code}`,
+          );
+          setPredictedQueueLength(res.data.predicted_queue_length_minutes ?? 0);
+        }
       } finally {
         setLoadingPredicted(false);
       }
     };
+
     fetchPrediction();
   }, [code, selectedDateTime]);
 
@@ -164,21 +187,39 @@ const ClientPage: React.FC = () => {
         const res = await axios.get<{ predictions: any[] }>(
           `https://waitport.com/api/v1/forecast/${code}`,
         );
-        const formatted =
-          res.data.predictions?.map(p => {
-            const date = new Date(p.timestamp);
-            date.setHours(date.getHours() + 2);
-            const time = date.toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            });
-            return {
-              timestamp: time,
-              Average: p.mean,
-              Low: p.q30,
-              High: p.q70,
-            };
-          }) ?? [];
+        // Keep only predictions that are in the future (local CPH time)
+        const future = res.data.predictions?.filter(p => {
+          const d = new Date(p.timestamp);
+          d.setHours(d.getHours() + 2); // shift to CPH
+          return d.getTime() >= Date.now();
+        }) ?? [];
+
+        const formatted = future.map(p => {
+          const date = new Date(p.timestamp);
+          date.setHours(date.getHours() + 2); // shift to CPH
+          const time = date.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+          return {
+            timestamp: time,
+            Average: p.mean,
+            Low: p.q30,
+            High: p.q70,
+          };
+        });
+        // Derive horizon (last timestamp minus now, in hours)
+        if (future.length) {
+          const last = new Date(future[future.length - 1].timestamp);
+          last.setHours(last.getHours() + 2); // shift to CPH
+          const hours = Math.max(
+            1,
+            Math.round((last.getTime() - Date.now()) / (1000 * 60 * 60)),
+          );
+          setForecastHorizon(hours);
+        } else {
+          setForecastHorizon(null);
+        }
         setForecastData(formatted);
       } finally {
         setLoadingForecast(false);
@@ -318,7 +359,9 @@ const ClientPage: React.FC = () => {
                 </div>
                 <div className="border-t border-gray-200 dark:border-gray-700 my-6" />
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Expected queue over the next&nbsp;6&nbsp;hours
+                  Expected queue over the next&nbsp;
+                  {forecastHorizon ?? 6}
+                  &nbsp;hour{forecastHorizon === 1 ? '' : 's'}&nbsp;(forecasts update every few hours)
                 </p>
 
                 {/* Forecast chart */}
@@ -354,7 +397,7 @@ const ClientPage: React.FC = () => {
                       Yesterday
                       <span className="h-4 w-px bg-blue-300 dark:bg-blue-700" />
                       <span className="font-medium text-gray-900 dark:text-gray-100">
-                        {formatMinutes(historical.yesterday)}
+                        {historical.yesterday === null ? 'Not available' : formatMinutes(historical.yesterday)}
                       </span>
                     </span>
 
@@ -363,7 +406,7 @@ const ClientPage: React.FC = () => {
                       1&nbsp;month&nbsp;ago
                       <span className="h-4 w-px bg-blue-300 dark:bg-blue-700" />
                       <span className="font-medium text-gray-900 dark:text-gray-100">
-                        {formatMinutes(historical.month)}
+                        {historical.month === null ? 'Not available' : formatMinutes(historical.month)}
                       </span>
                     </span>
 
@@ -372,7 +415,7 @@ const ClientPage: React.FC = () => {
                       1&nbsp;year&nbsp;ago
                       <span className="h-4 w-px bg-blue-300 dark:bg-blue-700" />
                       <span className="font-medium text-gray-900 dark:text-gray-100">
-                        {formatMinutes(historical.year)}
+                        {historical.year === null ? 'Not available' : formatMinutes(historical.year)}
                       </span>
                     </span>
                   </div>

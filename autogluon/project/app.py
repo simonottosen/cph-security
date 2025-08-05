@@ -41,7 +41,6 @@ airport_holiday_map = {
     'LHR': holidays.UnitedKingdom(),
     'EDI': holidays.UnitedKingdom(),
     'MUC': holidays.Germany(),
-    'OSL': holidays.Norway(),
 }
 
 # Valid airports for reference

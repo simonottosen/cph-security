@@ -3,20 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import Head from 'next/head';
-import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import Script from 'next/script';
 // Tremor Raw components (Tailwind v4)
 import { Card } from "@/components/Card";
 import { AreaChart } from "@/components/AreaChart";
-import 'react-datetime/css/react-datetime.css';
-import 'moment/locale/da';
-
-// Dynamically import DateTime to disable SSR for this component
-const DateTime = dynamic(() => import('react-datetime').then(mod => mod.default || mod), {
-  ssr: false,
-  loading: () => <span>Loading date picker...</span>,
-});
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 
 /* ------------------------------------------------------------------ */
 /* Types and constants that we also export so the server wrapper       */
@@ -49,8 +42,10 @@ const ClientPage: React.FC = () => {
   const [loadingQueue, setLoadingQueue] = useState(true);
   const [loadingAverage, setLoadingAverage] = useState(true);
 
+  const initialDateTime = new Date(Date.now() + 2 * 60 * 60 * 1000);
+
   const [selectedDateTime, setSelectedDateTime] = useState<Date>(
-    () => new Date(Date.now() + 2 * 60 * 60 * 1000),
+    initialDateTime,
   );
   const [predictedQueueLength, setPredictedQueueLength] = useState<number | null>(null);
   const [loadingPredicted, setLoadingPredicted] = useState(true);
@@ -149,7 +144,9 @@ const ClientPage: React.FC = () => {
   }, [code]);
 
   /* -------------------- RENDER CALC -------------------- */
-  const diffMinutes = Math.round((selectedDateTime.getTime() - Date.now()) / 60000);
+  const diffMinutes = Math.round(
+    (selectedDateTime.getTime() - Date.now()) / 60000,
+  );
   const timeDiffText =
     diffMinutes === 0
       ? 'at this time'
@@ -244,23 +241,30 @@ const ClientPage: React.FC = () => {
                 )}
 
                 {/* DateTime picker */}
-                <div className="mt-6">
-                  <label htmlFor="datetime-picker" className="block mb-2 font-medium">
-                    Select date &amp; time to personalize your prediction
+                <div className="mt-6 mb-8">
+                  <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Select date&nbsp;&amp;&nbsp;time for prediction
                   </label>
-                  <DateTime
-                    locale="da-dk"
-                    inputProps={{
-                      id: 'datetime-picker',
-                      className:
-                        'w-full rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2',
-                      'aria-label': 'Select date and time',
-                    }}
-                    dateFormat="DD/MM"
-                    timeFormat="HH:mm"
-                    closeOnSelect
-                    value={selectedDateTime}
+
+                  <DatePicker
+                    selected={selectedDateTime}
+                    onChange={(date: Date) => setSelectedDateTime(date as Date)}
+                    showTimeSelect
+                    timeIntervals={15}
+                    dateFormat="Pp"
+                    wrapperClassName="block w-full"
+                    className="block w-full rounded border-gray-300 dark;border-gray-600 bg-white dark:bg-gray-800 p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-800 dark:text-gray-100"
+                    calendarClassName="bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg shadow-lg p-3"
+                    dayClassName={(date) =>
+                      date.toDateString() === selectedDateTime.toDateString()
+                        ? 'bg-blue-500 text-white rounded-full'
+                        : 'hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full'
+                    }
                   />
+
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    The predicted queue length refers to this exact date&nbsp;&amp;&nbsp;time.
+                  </p>
                 </div>
 
                 {/* Forecast chart */}

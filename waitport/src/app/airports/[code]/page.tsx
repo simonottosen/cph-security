@@ -254,9 +254,12 @@ useEffect(() => {
   useEffect(() => {
     if (!queueSeries.length && !forecastData.length) return;
 
-    const past = queueSeries.map((p) => ({
+    // Copy the last real queue value into the Prediction series as well,
+    // so the two lines meet without a gap.
+    const past = queueSeries.map((p, idx) => ({
       time: p.time,
       Past: p.queue,
+      Prediction: idx === queueSeries.length - 1 ? p.queue : null,
     }));
 
     // Easing helper (smoothstep: 3t² − 2t³) for a soft transition
@@ -364,7 +367,7 @@ useEffect(() => {
                       Average in the last&nbsp;2 hours: <span className="font-semibold">{formatMinutes(averageQueue)}</span>
                     </p>
                     <p className="mt-1 text-gray-500">
-                      Average over the next&nbsp;2 hours:{' '}
+                      Average in the next&nbsp;2 hours:{' '}
                       <span className="font-semibold">{formatMinutes(avgNextTwoHours)}</span>
                     </p>
                     {/* Forecast chart for today */}
@@ -379,23 +382,12 @@ useEffect(() => {
                         data={combinedSeries}
                         index="time"
                         categories={['Past', 'Prediction']}
-                        colors={['blue', 'sky']}
+                        colors={['blue', 'violet']}
                         showLegend={true}
                         curveType="monotone"
                         valueFormatter={(v) =>
                           v === null ? '' : `${Math.round(v as number)} min`
                         }
-                      />
-                      {/* Marker line where prediction begins */}
-                      <div
-                        className="absolute bg-yellow-400 dark:bg-yellow-300"
-                        style={{
-                          top: '4.5rem',
-                          bottom: '1.8rem',
-                          width: '5px',
-                          /* 43 px compensates for chart gutter */
-                          left: `calc(${(transitionRatio * 100).toFixed(2)}% + 42px)`,
-                        }}
                       />
                       {/* Current queue label */}
                     </div>

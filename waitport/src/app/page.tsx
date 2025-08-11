@@ -5,6 +5,9 @@ import "./globals.css";
 import Head from 'next/head';
 import Link from 'next/link';
 import Script from 'next/script';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { SparkAreaChart } from "@/components/SparkChart";
 
 // Define TypeScript type for airport codes
 type AirportCode =
@@ -31,6 +34,83 @@ const airportNames: Record<AirportCode, string> = {
   ams: '🇳🇱 Amsterdam Airport',
   dub: '🇮🇪 Dublin Airport',
   ist: '🇹🇷 Istanbul Airport',
+};
+/* ------------------------------------------------------------------ */
+/* Small sparkline shown on the front page for each airport           */
+/* ------------------------------------------------------------------ */
+type SparkPoint = {
+  time: string;
+  Queue: number;
+};
+
+const AirportSparkline: React.FC<{ code: AirportCode }> = ({ code }) => {
+  const [data, setData] = useState<SparkPoint[]>([]);
+  const currentQueue = data.length ? data[data.length - 1].Queue : null;
+  const lastFive = data.slice(-5).map(d => d.Queue);
+  const prevTen = data.slice(-15, -5).map(d => d.Queue);
+
+  const avg = (arr: number[]) =>
+    arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : null;
+
+  const avgLastFive = avg(lastFive);
+  const avgPrevTen = avg(prevTen);
+
+  const trend =
+    avgLastFive !== null && avgPrevTen !== null ? avgLastFive - avgPrevTen : 0;
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await axios.get<{ queue: number; timestamp: string }[]>(
+          `https://waitport.com/api/v1/all?airport=eq.${code.toUpperCase()}&select=queue,timestamp&limit=24&order=id.desc`,
+        );
+        const series = res.data.map((d) => ({
+          time: new Date(d.timestamp).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          Queue: d.queue,
+        }));
+        setData(series.reverse());          // chronological order
+      } catch {
+        setData([]);                        // fallback → empty spark
+      }
+    };
+
+    fetchData();
+  }, [code]);
+
+  if (!data.length) {
+    return <span className="text-xs text-gray-400">—</span>;
+  }
+
+  return (
+    <div className="flex items-center space-x-1">
+      <SparkAreaChart
+        data={data}
+        categories={['Queue']}
+        index="time"
+        colors={['blue']}
+        className="h-8 w-20 sm:h-8 sm:w-28"
+      />
+      <span className="inline-flex items-center gap-0.5 rounded-md bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+        {currentQueue} min
+        {avgPrevTen !== null && avgLastFive !== null && (
+          <span
+            className={
+              trend > 0
+                ? 'text-red-600 dark:text-red-400'
+                : trend < 0
+                ? 'text-green-600 dark:text-green-400'
+                : 'text-gray-500 dark:text-gray-400'
+            }
+          >
+            {trend > 0 ? '↑' : trend < 0 ? '↓' : '→'}
+          </span>
+        )}
+      </span>
+    </div>
+  );
 };
 
 const Home: React.FC = () => {
@@ -127,11 +207,15 @@ const Home: React.FC = () => {
               <h2 className="text-2xl md:text-3xl font-semibold text-gray-800 dark:text-gray-100 mb-2">Select airport</h2>
               <ul className="divide-y divide-gray-200 dark:divide-gray-700">
                 {Object.entries(airportNames).map(([code, name]) => (
-                  <li key={code} className="p-4 hover:bg-indigo-50 dark:hover:bg-gray-700 transition-colors">
-                    <Link href={`/airports/${code}`} className="text-decoration-none">
-                      {name}
-                    </Link>
-                  </li>
+                <li
+                  key={code}
+                  className="flex items-center justify-between p-4 hover:bg-indigo-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <Link href={`/airports/${code}`} className="flex-1 text-left">
+                    {name}
+                  </Link>
+                  <AirportSparkline code={code as AirportCode} />
+                </li>
                 ))}
               </ul>
             </div>

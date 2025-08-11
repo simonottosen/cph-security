@@ -66,6 +66,12 @@ const ClientPage: React.FC = () => {
   const [forecastHorizon, setForecastHorizon] = useState<number | null>(null);
 
   const [queueSeries, setQueueSeries] = useState<QueuePoint[]>([]);
+  // Combined data for past (actual) and future (predicted) queue values
+  const [combinedSeries, setCombinedSeries] = useState<any[]>([]);
+  // 0‑1 value that marks where the future prediction starts along the X‑axis
+  const [transitionRatio, setTransitionRatio] = useState<number>(0);
+  // Predicted average queue length over the next 2 hours
+  const [avgNextTwoHours, setAvgNextTwoHours] = useState<number | null>(null);
 
   /* -------------------- HELPERS -------------------- */
   const formatMinutes = (m: number | null) =>
@@ -203,9 +209,9 @@ useEffect(() => {
           });
           return {
             timestamp: time,
-            Average: p.mean,
-            Low: p.q30,
-            High: p.q70,
+            Average: Math.max(0, p.mean),
+            Low: Math.max(0, p.q30),
+            High: Math.max(0, p.q70),
           };
         });
         // Derive horizon (last timestamp minus now, in hours)
@@ -227,6 +233,68 @@ useEffect(() => {
     };
     fetchForecast();
   }, [code]);
+
+  // Derive predicted average over the next two hours (first 8 forecast points = 2 h)
+  useEffect(() => {
+    if (!forecastData.length) {
+      setAvgNextTwoHours(null);
+      return;
+    }
+    const window = forecastData.slice(0, 8); // 8 × 15‑min = 2 h
+    if (!window.length) {
+      setAvgNextTwoHours(null);
+      return;
+    }
+    const avg =
+      window.reduce((sum, p) => sum + p.Average, 0) / window.length;
+    setAvgNextTwoHours(Math.round(Math.max(0, avg)));
+  }, [forecastData]);
+
+  // Merge queueSeries (past) and forecastData (future) into a single series
+  useEffect(() => {
+    if (!queueSeries.length && !forecastData.length) return;
+
+    const past = queueSeries.map((p) => ({
+      time: p.time,
+      Past: p.queue,
+    }));
+
+    // Easing helper (smoothstep: 3t² − 2t³) for a soft transition
+    const smoothstep = (t: number) => 3 * t * t - 2 * t * t * t;
+
+    const lastQueue = queueSeries.length
+      ? queueSeries[queueSeries.length - 1].queue
+      : null;
+
+    const future = forecastData.map((p, idx) => {
+      // If we don't have a last real queue value, fall back to the raw prediction
+      if (lastQueue === null) {
+        return {
+          time: p.timestamp,
+          Prediction: Math.max(0, p.Average),
+        };
+      }
+
+      const progress = (idx + 1) / forecastData.length; // 0‒1
+      const blend = smoothstep(progress);
+      const blendedValue = Math.max(0, lastQueue * (1 - blend) + p.Average * blend);
+
+      return {
+        time: p.timestamp,
+        Prediction: blendedValue,
+      };
+    });
+
+    const merged = [...past, ...future];
+    setCombinedSeries(merged);
+
+    // Where does the prediction start (as a % of chart width)?
+    const ratio =
+      past.length && merged.length > 1
+        ? past.length / (merged.length - 1)
+        : 0;
+    setTransitionRatio(ratio);
+  }, [queueSeries, forecastData]);
 
   /* -------------------- RENDER CALC -------------------- */
   const diffMinutes = Math.round(
@@ -267,7 +335,7 @@ useEffect(() => {
             </h1>
           </Link>
           <h2 className="text-lg md:text-xl text-gray-600 dark:text-gray-300">
-            Real‑Time &amp; Predicted Airport Security Queues
+            Current &amp; future airport security queues
           </h2>
         </header>
 
@@ -275,11 +343,11 @@ useEffect(() => {
         <main className="flex-1 w-full max-w-6xl mx-auto px-6">
           {/* Queue overview */}
           <section className="mt-4">
-            <div className="grid gap-6 lg:gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-6 lg:gap-4 md:grid-cols-2 lg:grid-cols-2">
               {/* Current queue */}
               <Card className="shadow-sm ring-1 ring-gray-200 dark:ring-gray-700 dark:bg-gray-900/50 rounded-lg">
                 <h3 className="text-lg md:text-xl font-semibold text-gray-800 dark:text-gray-100 mb-2">
-                  Current queue
+                  Today’s queue
                 </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                   Live security‑queue wait time, updated every few minutes.
@@ -295,25 +363,62 @@ useEffect(() => {
                     <p className="mt-1 text-gray-500">
                       Average in the last&nbsp;2 hours: <span className="font-semibold">{formatMinutes(averageQueue)}</span>
                     </p>
-                    {queueSeries.length > 0 && (
+                    <p className="mt-1 text-gray-500">
+                      Average over the next&nbsp;2 hours:{' '}
+                      <span className="font-semibold">{formatMinutes(avgNextTwoHours)}</span>
+                    </p>
+                    {/* Forecast chart for today */}
+                {loadingAverage || loadingForecast ? (
+                  <p className="mt-4">Loading chart…</p>
+                ) : (
+                  <>
+                    <div className="relative mt-6">
+                      {/* Past = blue, Prediction = sky‑blue */}
                       <AreaChart
-                        className="h-48 mt-6"
-                        data={queueSeries.map(p => ({
-                          time: p.time,
-                          Queue: p.queue,
-                          Average: averageQueue ?? 0,
-                        }))}
+                        className="h-60"
+                        data={combinedSeries}
                         index="time"
-                        categories={['Queue', 'Average']}
-                        colors={['blue', 'gray']}
-                        showLegend={false}
-                        valueFormatter={v => `${v as number} min`}
+                        categories={['Past', 'Prediction']}
+                        colors={['blue', 'sky']}
+                        showLegend={true}
+                        curveType="monotone"
+                        valueFormatter={(v) =>
+                          v === null ? '' : `${Math.round(v as number)} min`
+                        }
                       />
-                    )}
+                      {/* Marker line where prediction begins */}
+                      <div
+                        className="absolute bg-yellow-400 dark:bg-yellow-300"
+                        style={{
+                          top: '4.5rem',
+                          bottom: '1.8rem',
+                          width: '5px',
+                          /* 43 px compensates for chart gutter */
+                          left: `calc(${(transitionRatio * 100).toFixed(2)}% + 42px)`,
+                        }}
+                      />
+                      {/* Current queue label */}
+                    </div>
+                    <style jsx global>{`
+                      /* The second area represents future predictions */
+                      .recharts-layer .recharts-area:nth-of-type(2) path {
+                        stroke-dasharray: 4 4;
+                        fill-opacity: 0.15;
+                      }
+                    `}</style>
+                    <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+                      Expected queue over the next&nbsp;
+                      {forecastHorizon ?? 6}
+                      &nbsp;hour{forecastHorizon === 1 ? '' : 's'}&nbsp;(forecasts update every few hours)
+                    </p>
+                  </>
+                )}
                   </>
                 )}
               </Card>
 
+              {/* Right‑column stack */}
+              <div className="flex flex-col gap-6 lg:col-start-2 h-full justify-between">
               {/* Prediction */}
               <Card className="shadow-sm ring-1 ring-gray-200 dark:ring-gray-700 dark:bg-gray-900/50 rounded-lg">
                 <h3 className="text-lg md:text-xl font-semibold text-gray-800 dark:text-gray-100 mb-2">
@@ -322,14 +427,7 @@ useEffect(() => {
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                   Estimated wait time for the date&nbsp;&amp;&nbsp;time you pick below.
                 </p>
-                {loadingPredicted ? (
-                  <p>Loading…</p>
-                ) : (
-                  <>
-                    <p className="text-3xl font-bold text-gray-800 dark:text-gray-100">{formatMinutes(predictedQueueLength)}</p>
-                    <p className="mt-2 text-gray-500">{timeDiffText}</p>
-                  </>
-                )}
+
 
                 {/* DateTime picker */}
                 <div className="mt-6 mb-8">
@@ -354,30 +452,19 @@ useEffect(() => {
                   />
 
                   <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    The predicted queue length refers to this exact date&nbsp;&amp;&nbsp;time.
                   </p>
                 </div>
-                <div className="border-t border-gray-200 dark:border-gray-700 my-6" />
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Expected queue over the next&nbsp;
-                  {forecastHorizon ?? 6}
-                  &nbsp;hour{forecastHorizon === 1 ? '' : 's'}&nbsp;(forecasts update every few hours)
-                </p>
-
-                {/* Forecast chart */}
-                {loadingForecast ? (
-                  <p className="mt-4">Loading forecast…</p>
+                {loadingPredicted ? (
+                  <p>Loading…</p>
                 ) : (
-                  <AreaChart
-                    className="h-60 mt-6"
-                    data={forecastData}
-                    index="timestamp"
-                    categories={['High', 'Average']}
-                    colors={['blue', 'gray']}
-                    showLegend={true}
-                    valueFormatter={v => `${Math.round(v as number)} min`}
-                  />
+                  <>
+                    <div className="flex items-center space-x-2 mt-4">
+                      <p className="text-3xl font-bold text-gray-800 dark:text-gray-100">{formatMinutes(predictedQueueLength)}</p>
+                      <p className="mt-2 text-gray-500">{timeDiffText}</p>
+                    </div>
+                  </>
                 )}
+
               </Card>
 
               {/* Historical */}
@@ -421,6 +508,7 @@ useEffect(() => {
                   </div>
                 )}
               </Card>
+              </div>
             </div>
           </section>
 

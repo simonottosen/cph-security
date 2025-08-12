@@ -8,6 +8,7 @@ import Script from 'next/script';
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { SparkAreaChart } from "@/components/SparkChart";
+import { useI18n } from "@/i18n/I18nProvider";
 
 // Define TypeScript type for airport codes
 type AirportCode =
@@ -205,6 +206,7 @@ const AirportSparkline: React.FC<{ code: AirportCode }> = ({ code }) => {
 };
 
 const Home: React.FC = () => {
+  const { t, locale } = useI18n();
   return (
     <>
       {/* Head for SEO optimization */}
@@ -257,13 +259,13 @@ const Home: React.FC = () => {
 
         <section className="w-full bg-white dark:bg-gray-900 py-8 text-center">
           <p className="text-sm font-semibold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-3">
-            Built for Travellers
+            {t('builtForTravellers')}
           </p>
           <h1 className="text-5xl md:text-6xl font-extrabold text-gray-900 dark:text-gray-100 tracking-tight mb-6">
             Waitport&nbsp;🛫
           </h1>
           <p className="max-w-2xl mx-auto text-xl md:text-2xl text-gray-600 dark:text-gray-300">
-            Real‑time &amp; predicted security queue times at Europe’s busiest airports
+            {t('home.description')}
           </p>
         </section>
 
@@ -272,20 +274,9 @@ const Home: React.FC = () => {
         <section className="w-full bg-gray-50 dark:bg-gray-800 py-8">
           <div className="flex justify-center px-4">
             <div className="w-full max-w-3xl bg-white dark:bg-gray-900/40 rounded-xl shadow-sm ring-1 ring-gray-200 dark:ring-gray-800 border border-gray-100 dark:border-gray-700 p-6">
-              <h2 className="text-2xl md:text-3xl font-semibold text-gray-800 dark:text-gray-100 mb-2">About Waitport</h2>
+              <h2 className="text-2xl md:text-3xl font-semibold text-gray-800 dark:text-gray-100 mb-2">{t('about.title')}</h2>
               <p className="text-lg">
-                Welcome to <strong>Waitport</strong>! Here, you can track security
-                waiting times across major European airports in real-time. We also
-                provide conservative <strong> security queue predictions</strong> for future
-                dates and times. This helps you plan your trip more effectively and
-                avoid unexpected delays.
-                <br />
-                <br />
-                Select an airport below to see the current and predicted security
-                queue times.{' '} <span role="img" aria-label="globe">🌏</span>
-                <br />
-                <br />
-                Safe travels!
+                {t('about.description')}
               </p>
             </div>
           </div>
@@ -294,14 +285,14 @@ const Home: React.FC = () => {
         <section className="w-full bg-white dark:bg-gray-900 py-8">
           <div className="flex justify-center px-4">
             <div className="w-full max-w-3xl bg-white dark:bg-gray-900/40 rounded-xl shadow-sm ring-1 ring-gray-200 dark:ring-gray-800 border border-gray-100 dark:border-gray-700 p-6">
-              <h2 className="text-2xl md:text-3xl font-semibold text-gray-800 dark:text-gray-100 mb-2">Select airport</h2>
+              <h2 className="text-2xl md:text-3xl font-semibold text-gray-800 dark:text-gray-100 mb-2">{t('selectAirport')}</h2>
               <ul className="divide-y divide-gray-200 dark:divide-gray-700">
                 {Object.entries(airportNames).map(([code, name]) => (
                 <li
                   key={code}
                   className="flex items-center justify-between p-4 hover:bg-indigo-50 dark:hover:bg-gray-700 transition-colors"
                 >
-                  <Link href={`/airports/${code}`} className="flex-1 text-left">
+                  <Link href={`/${locale}/airports/${code}`} className="flex-1 text-left">
                     {name}
                   </Link>
                   <AirportSparkline code={code as AirportCode} />
@@ -325,7 +316,7 @@ const Home: React.FC = () => {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Other projects
+                  {t('otherProjects')}
                 </a>
               </li>
               <li className="nav-item">
@@ -335,7 +326,7 @@ const Home: React.FC = () => {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  API
+                  {t('api')}
                 </a>
               </li>
               <li className="nav-item">
@@ -345,12 +336,12 @@ const Home: React.FC = () => {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  GitHub
+                  {t('github')}
                 </a>
               </li>
             </ul>
             <p className="text-center text-sm text-gray-500 dark:text-gray-400">
-              Made with <span role="img" aria-label="heart">❤️</span> by Simon Ottosen
+              {t('madeWith')}
             </p>
           </footer>
         </div>

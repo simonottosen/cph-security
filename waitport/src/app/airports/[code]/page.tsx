@@ -9,6 +9,7 @@ import Script from 'next/script';
 import { Card } from "@/components/Card";
 import { AreaChart } from "@/components/AreaChart";
 import DatePicker from 'react-datepicker';
+import { useI18n } from "@/i18n/I18nProvider";
 import 'react-datepicker/dist/react-datepicker.css';
 
 /* ------------------------------------------------------------------ */
@@ -35,6 +36,10 @@ const ClientPage: React.FC = () => {
   const code = (params.code ?? 'cph') as AirportCode;
 
   const airportName = airportNames[code];
+  const { t, locale } = useI18n();
+
+  // Compute root path that honours current locale (English uses bare "/")
+  const rootPath = locale === 'en' ? '/' : `/${locale}`;
 
   /* -------------------- STATE -------------------- */
   const [queue, setQueue] = useState<number | null>(null);
@@ -75,7 +80,7 @@ const ClientPage: React.FC = () => {
 
   /* -------------------- HELPERS -------------------- */
   const formatMinutes = (m: number | null) =>
-    m !== null ? `${m} ${m === 1 ? 'minute' : 'minutes'}` : '-';
+    m !== null ? `${m} ${m === 1 ? t('minute') : t('minutes')}` : '-';
 
   /* -------------------- DATA FETCH -------------------- */
   useEffect(() => {
@@ -305,10 +310,10 @@ useEffect(() => {
   );
   const timeDiffText =
     diffMinutes === 0
-      ? 'at this time'
+      ? t('atThisTime')
       : diffMinutes < 60
-      ? `in ${diffMinutes} minutes`
-      : `in ${Math.round(diffMinutes / 60)} hours`;
+      ? t('inMinutes', { minutes: diffMinutes })
+      : t('inHours', { hours: Math.round(diffMinutes / 60) });
 
   /* -------------------- JSX -------------------- */
   return (
@@ -332,13 +337,14 @@ useEffect(() => {
       <div className="min-h-screen flex flex-col bg-linear-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
         {/* Header */}
         <header className="py-6 text-center">
-          <Link href="/" className="inline-block">
+          {/* Preserve current locale when navigating home */}
+          <Link href={rootPath} className="inline-block">
             <h1 className="text-4xl md:text-5xl font-extrabold text-gray-800 dark:text-gray-100 mb-1 hover:opacity-80">
               Waitport 🛫
             </h1>
           </Link>
           <h2 className="text-lg md:text-xl text-gray-600 dark:text-gray-300">
-            Current &amp; future airport security queues
+            {t('currentFutureQueues')}
           </h2>
         </header>
 
@@ -350,29 +356,28 @@ useEffect(() => {
               {/* Current queue */}
               <Card className="shadow-sm ring-1 ring-gray-200 dark:ring-gray-700 dark:bg-gray-900/50 rounded-lg">
                 <h3 className="text-lg md:text-xl font-semibold text-gray-800 dark:text-gray-100 mb-2">
-                  Today’s queue
+                  {t('todayQueue')}
                 </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                  Live security‑queue wait time, updated every few minutes.
+                  {t('todayQueue.description')}
                 </p>
                 {loadingQueue || loadingAverage ? (
-                  <p>Loading…</p>
+                  <p>{t('loading')}</p>
                 ) : (
                   <>
                     <div className="flex items-center space-x-2 mt-4">
                       <p className="text-3xl font-bold text-gray-800 dark:text-gray-100">{formatMinutes(queue)}</p>
-                      <p className="mt-2 text-gray-500">now</p>
+                      <p className="mt-2 text-gray-500">{t('now')}</p>
                     </div>
                     <p className="mt-1 text-gray-500">
-                      Average in the last&nbsp;2 hours: <span className="font-semibold">{formatMinutes(averageQueue)}</span>
+                      {t('averageLast2Hours')}: <span className="font-semibold">{formatMinutes(averageQueue)}</span>
                     </p>
                     <p className="mt-1 text-gray-500">
-                      Average in the next&nbsp;2 hours:{' '}
-                      <span className="font-semibold">{formatMinutes(avgNextTwoHours)}</span>
+                      {t('averageNext2Hours')}: <span className="font-semibold">{formatMinutes(avgNextTwoHours)}</span>
                     </p>
                     {/* Forecast chart for today */}
                 {loadingAverage || loadingForecast ? (
-                  <p className="mt-4">Loading chart…</p>
+                  <p className="mt-4">{t('loadingChart')}</p>
                 ) : (
                   <>
                     <div className="relative mt-6">
@@ -381,10 +386,12 @@ useEffect(() => {
                         className="h-60"
                         data={combinedSeries}
                         index="time"
-                        categories={['Past', 'Prediction']}
+                        categories={[
+                          { key: 'Past', label: t('chart.past') },
+                          { key: 'Prediction', label: t('chart.prediction') },
+                        ]}
                         colors={['blue', 'violet']}
                         showLegend={true}
-                        curveType="monotone"
                         valueFormatter={(v) =>
                           v === null ? '' : `${Math.round(v as number)} min`
                         }
@@ -399,9 +406,7 @@ useEffect(() => {
                       }
                     `}</style>
                     <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
-                      Expected queue over the next&nbsp;
-                      {forecastHorizon ?? 6}
-                      &nbsp;hour{forecastHorizon === 1 ? '' : 's'}&nbsp;(forecasts update every few hours)
+                      {t('expectedQueueHorizon', { hours: forecastHorizon ?? 6 })}
                     </p>
                   </>
                 )}
@@ -414,34 +419,34 @@ useEffect(() => {
               {/* Prediction */}
               <Card className="shadow-sm ring-1 ring-gray-200 dark:ring-gray-700 dark:bg-gray-900/50 rounded-lg">
                 <h3 className="text-lg md:text-xl font-semibold text-gray-800 dark:text-gray-100 mb-2">
-                  Prediction
+                  {t('prediction.title')}
                 </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                  Estimated wait time for the date&nbsp;&amp;&nbsp;time you pick below.
+                  {t('prediction.description')}
                 </p>
 
 
                 {/* DateTime picker */}
                 <div className="mt-6 mb-8">
                   <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Select date&nbsp;&amp;&nbsp;time for prediction
+                    {t('picker.label')}
                   </label>
 
-                  <DatePicker
-                    selected={selectedDateTime}
-                    onChange={(date: Date) => setSelectedDateTime(date as Date)}
-                    showTimeSelect
-                    timeIntervals={15}
-                    dateFormat="Pp"
-                    wrapperClassName="block w-full"
-                    className="block w-full rounded border-gray-300 dark;border-gray-600 bg-white dark:bg-gray-800 p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-800 dark:text-gray-100"
-                    calendarClassName="bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg shadow-lg p-3"
-                    dayClassName={(date) =>
-                      date.toDateString() === selectedDateTime.toDateString()
-                        ? 'bg-blue-500 text-white rounded-full'
-                        : 'hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full'
-                    }
-                  />
+                    <DatePicker
+                      selected={selectedDateTime}
+                      onChange={(date: Date) => setSelectedDateTime(date as Date)}
+                      showTimeSelect
+                      timeIntervals={15}
+                      dateFormat={locale === 'da' ? 'dd/MM/yyyy, HH:mm' : 'Pp'}
+                      wrapperClassName="block w-full"
+                      className="block w-full rounded border-gray-300 dark;border-gray-600 bg-white dark:bg-gray-800 p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-800 dark:text-gray-100"
+                      calendarClassName="bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg shadow-lg p-3"
+                      dayClassName={(date) =>
+                        date.toDateString() === selectedDateTime.toDateString()
+                          ? 'bg-blue-500 text-white rounded-full'
+                          : 'hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full'
+                      }
+                    />
 
                   <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                   </p>
@@ -462,39 +467,39 @@ useEffect(() => {
               {/* Historical */}
               <Card className="shadow-sm ring-1 ring-gray-200 dark:ring-gray-700 dark:bg-gray-900/50 rounded-lg">
                 <h3 className="text-lg md:text-xl font-semibold text-gray-800 dark:text-gray-100 mb-2">
-                  Historical
+                  {t('historical.title')}
                 </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                  What the queue looked like at roughly this time yesterday, one&nbsp;month ago, and one&nbsp;year ago.
+                  {t('historical.description')}
                 </p>
                 {loadingHistorical ? (
-                  <p>Loading…</p>
+                  <p>{t('loading')}</p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     {/* Yesterday */}
                     <span className="inline-flex w-48 items-center whitespace-nowrap justify-between gap-2 rounded-md bg-blue-100 dark:bg-blue-900 py-1 pl-2.5 pr-2 text-sm text-gray-800 dark:text-gray-200 ring-1 ring-inset ring-blue-200 dark:ring-blue-800">
-                      Yesterday
+                      {t('yesterday')}
                       <span className="h-4 w-px bg-blue-300 dark:bg-blue-700" />
                       <span className="font-medium text-gray-900 dark:text-gray-100">
-                        {historical.yesterday === null ? 'Not available' : formatMinutes(historical.yesterday)}
+                        {historical.yesterday === null ? t('notAvailable') : formatMinutes(historical.yesterday)}
                       </span>
                     </span>
 
                     {/* One month ago */}
                     <span className="inline-flex w-48 items-center whitespace-nowrap justify-between gap-2 rounded-md bg-blue-100 dark:bg-blue-900 py-1 pl-2.5 pr-2 text-sm text-gray-800 dark:text-gray-200 ring-1 ring-inset ring-blue-200 dark:ring-blue-800">
-                      1&nbsp;month&nbsp;ago
+                      {t('oneMonthAgo')}
                       <span className="h-4 w-px bg-blue-300 dark:bg-blue-700" />
                       <span className="font-medium text-gray-900 dark:text-gray-100">
-                        {historical.month === null ? 'Not available' : formatMinutes(historical.month)}
+                        {historical.month === null ? t('notAvailable') : formatMinutes(historical.month)}
                       </span>
                     </span>
 
                     {/* One year ago */}
                     <span className="inline-flex w-48 items-center whitespace-nowrap justify-between gap-2 rounded-md bg-blue-100 dark:bg-blue-900 py-1 pl-2.5 pr-2 text-sm text-gray-800 dark:text-gray-200 ring-1 ring-inset ring-blue-200 dark:ring-blue-800">
-                      1&nbsp;year&nbsp;ago
+                      {t('oneYearAgo')}
                       <span className="h-4 w-px bg-blue-300 dark:bg-blue-700" />
                       <span className="font-medium text-gray-900 dark:text-gray-100">
-                        {historical.year === null ? 'Not available' : formatMinutes(historical.year)}
+                        {historical.year === null ? t('notAvailable') : formatMinutes(historical.year)}
                       </span>
                     </span>
                   </div>
@@ -506,12 +511,12 @@ useEffect(() => {
 
           {/* Select another airport */}
           <section className="mt-10">
-            <h3 className="mb-3 text-lg font-semibold">Select another airport</h3>
+            <h3 className="mb-3 text-lg font-semibold">{t('selectAnotherAirport')}</h3>
             <select
               className="mt-2 block w-full rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2"
               value={code}
               onChange={e =>
-                (window.location.href = `/airports/${(e.target as HTMLSelectElement).value}`)
+                (window.location.href = `/${locale}/airports/${(e.target as HTMLSelectElement).value}`)
               }
               aria-label="Select Airport"
             >
@@ -528,33 +533,33 @@ useEffect(() => {
         <footer className="py-6 text-gray-500 dark:text-gray-400">
           <ul className="flex justify-center border-b border-gray-200 dark:border-gray-700 pb-3 mb-3">
             <li>
-              <Link href="https://simonottosen.dk/" className="mx-2 hover:text-gray-700 dark:hover:text-gray-300" target="_blank">
-                Other projects
-              </Link>
+                <Link href="https://simonottosen.dk/" className="mx-2 hover:text-gray-700 dark:hover:text-gray-300" target="_blank">
+                {t('otherProjects')}
+                </Link>
             </li>
             <li>
-              <Link
+                <Link
                 href="https://waitport.com/api/v1/all?order=id.desc&limit=100"
                 className="mx-2 hover:text-gray-700 dark:hover:text-gray-300"
                 target="_blank"
               >
-                API
+                {t('api')}
               </Link>
             </li>
             <li>
-              <Link
+                <Link
                 href="https://github.com/simonottosen/cph-security"
                 className="mx-2 hover:text-gray-700 dark:hover:text-gray-300"
                 target="_blank"
               >
-                GitHub
+                {t('github')}
               </Link>
             </li>
           </ul>
           <p className="text-center text-sm">
-            Made with <span role="img" aria-label="heart">❤️</span> by Simon Ottosen
+            {t('madeWith')}
           </p>
-          <p className="text-center text-xs">&copy; {new Date().getFullYear()} Waitport</p>
+          <p className="text-center text-xs">{t('copyright', { year: new Date().getFullYear() })}</p>
         </footer>
       </div>
     </>

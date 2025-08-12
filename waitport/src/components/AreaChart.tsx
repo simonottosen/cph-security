@@ -34,10 +34,10 @@ import { hasOnlyOneValueForKey } from "../utils/hasOnlyOneValueForKey"
 //#region Legend
 
 interface LegendItemProps {
-  name: string
+  name: string | number
   color: AvailableChartColorsKeys
-  onClick?: (name: string, color: AvailableChartColorsKeys) => void
-  activeLegend?: string
+  onClick?: (name: string | number, color: AvailableChartColorsKeys) => void
+  activeLegend?: string | number
 }
 
 const LegendItem = ({
@@ -145,10 +145,10 @@ const ScrollButton = ({ icon, onClick, disabled }: ScrollButtonProps) => {
 }
 
 interface LegendProps extends React.OlHTMLAttributes<HTMLOListElement> {
-  categories: string[]
+  categories: Array<string | number>
   colors?: AvailableChartColorsKeys[]
-  onClickLegendItem?: (category: string, color: string) => void
-  activeLegend?: string
+  onClickLegendItem?: (category: string | number, color: string) => void
+  activeLegend?: string | number
   enableLegendSlider?: boolean
 }
 
@@ -273,7 +273,7 @@ const Legend = React.forwardRef<HTMLOListElement, LegendProps>((props, ref) => {
         {categories.map((category, index) => (
           <LegendItem
             key={`item-${index}`}
-            name={category}
+            name={String(category)}
             color={colors[index] as AvailableChartColorsKeys}
             onClick={onClickLegendItem}
             activeLegend={activeLegend}
@@ -316,11 +316,11 @@ const Legend = React.forwardRef<HTMLOListElement, LegendProps>((props, ref) => {
 Legend.displayName = "Legend"
 
 const ChartLegend = (
-  { payload }: any,
+  { payload, categories }: any,
   categoryColors: Map<string, AvailableChartColorsKeys>,
   setLegendHeight: React.Dispatch<React.SetStateAction<number>>,
-  activeLegend: string | undefined,
-  onClick?: (category: string, color: string) => void,
+  activeLegend: string | number | undefined,
+  onClick?: (category: string | number, color?: string) => void,
   enableLegendSlider?: boolean,
   legendPosition?: "left" | "center" | "right",
   yAxisWidth?: number,
@@ -333,7 +333,17 @@ const ChartLegend = (
     setLegendHeight(calculateHeight(legendRef.current?.clientHeight))
   })
 
-  const legendPayload = payload.filter((item: any) => item.type !== "none")
+    const legendPayload = payload.filter((item: any) => item.type !== "none")
+    // normalize payload into { key, label } where key is the dataKey (used for colors)
+    const normalizedPayload = legendPayload.map((entry: any) => {
+      const label = String(entry.value)
+      const key = entry.dataKey ?? entry.payload?.dataKey ?? label
+      return {
+        ...entry,
+        label,
+        key,
+      }
+    })
 
   const paddingLeft =
     legendPosition === "left" && yAxisWidth ? yAxisWidth - 8 : 0
@@ -350,9 +360,9 @@ const ChartLegend = (
       )}
     >
       <Legend
-        categories={legendPayload.map((entry: any) => entry.value)}
-        colors={legendPayload.map((entry: any) =>
-          categoryColors.get(entry.value),
+        categories={normalizedPayload.map((e: any) => e.label)}
+        colors={normalizedPayload.map((e: any) =>
+          (categoryColors.get(String(e.key)) ?? 'blue') as AvailableChartColorsKeys
         )}
         onClickLegendItem={onClick}
         activeLegend={activeLegend}
@@ -369,7 +379,7 @@ type TooltipProps = Pick<ChartTooltipProps, "active" | "payload" | "label">
 type PayloadItem = {
   category: string
   value: number
-  index: string
+  index: string | number
   color: AvailableChartColorsKeys
   type?: string
   payload: any
@@ -378,7 +388,7 @@ type PayloadItem = {
 interface ChartTooltipProps {
   active: boolean | undefined
   payload: PayloadItem[]
-  label: string
+  label: string | number
   valueFormatter: (value: number) => string
 }
 
@@ -474,7 +484,8 @@ type AreaChartEventProps = BaseEventProps | null | undefined
 interface AreaChartProps extends React.HTMLAttributes<HTMLDivElement> {
   data: Record<string, any>[]
   index: string
-  categories: string[]
+  // categories may be either a string (dataKey) or an object { key, label }
+  categories: Array<string | { key: string; label: string }>
   colors?: AvailableChartColorsKeys[]
   valueFormatter?: (value: number) => string
   startEndOnly?: boolean
@@ -546,7 +557,11 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
     const [activeLegend, setActiveLegend] = React.useState<string | undefined>(
       undefined,
     )
-    const categoryColors = constructCategoryColors(categories, colors)
+    // support categories as either strings or { key, label }
+    const categoryKeys = (categories as Array<any>).map((c) =>
+      typeof c === "string" ? c : c.key,
+    )
+    const categoryColors = constructCategoryColors(categoryKeys, colors)
 
     const yAxisDomain = getYAxisDomain(autoMinValue, minValue, maxValue)
     const hasOnValueChange = !!onValueChange
@@ -798,13 +813,13 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
                 height={legendHeight}
                 content={({ payload }) =>
                   ChartLegend(
-                    { payload },
+                    { payload, categories: categoryKeys },
                     categoryColors,
                     setLegendHeight,
-                    activeLegend,
+                    activeLegend !== undefined && activeLegend !== null ? String(activeLegend) : undefined,
                     hasOnValueChange
-                      ? (clickedLegendItem: string) =>
-                          onCategoryClick(clickedLegendItem)
+                      ? (clickedLegendItem: string | number) =>
+                          onCategoryClick(String(clickedLegendItem))
                       : undefined,
                     enableLegendSlider,
                     legendPosition,
@@ -814,16 +829,18 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
               />
             ) : null}
             {categories.map((category) => {
-              const categoryId = `${areaId}-${category.replace(/[^a-zA-Z0-9]/g, "")}`
+              const dataKey = typeof category === "string" ? category : category.key
+              const displayName = typeof category === "string" ? category : category.label
+              const categoryId = `${areaId}-${dataKey.replace(/[^a-zA-Z0-9]/g, "")}`
               return (
-                <React.Fragment key={category}>
-                  <defs key={category}>
+                <React.Fragment key={String(dataKey)}>
+                  <defs key={dataKey}>
                     <linearGradient
-                      key={category}
+                      key={dataKey}
                       className={cx(
                         getColorClassName(
                           categoryColors.get(
-                            category,
+                            dataKey,
                           ) as AvailableChartColorsKeys,
                           "text",
                         ),
@@ -838,7 +855,7 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
                         fillType: fill,
                         activeDot: activeDot,
                         activeLegend: activeLegend,
-                        category: category,
+                        category: dataKey,
                       })}
                     </linearGradient>
                   </defs>
@@ -846,13 +863,13 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
                     className={cx(
                       getColorClassName(
                         categoryColors.get(
-                          category,
+                          dataKey,
                         ) as AvailableChartColorsKeys,
                         "stroke",
                       ),
                     )}
                     strokeOpacity={
-                      activeDot || (activeLegend && activeLegend !== category)
+                      activeDot || (activeLegend && activeLegend !== dataKey)
                         ? 0.3
                         : 1
                     }
@@ -903,13 +920,13 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
                       } = props
 
                       if (
-                        (hasOnlyOneValueForKey(data, category) &&
+                        (hasOnlyOneValueForKey(data, dataKey) &&
                           !(
                             activeDot ||
-                            (activeLegend && activeLegend !== category)
+                            (activeLegend && activeLegend !== dataKey)
                           )) ||
                         (activeDot?.index === index &&
-                          activeDot?.dataKey === category)
+                          activeDot?.dataKey === dataKey)
                       ) {
                         return (
                           <Dot
@@ -937,10 +954,10 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
                       }
                       return <React.Fragment key={index}></React.Fragment>
                     }}
-                    key={category}
-                    name={category}
+                    key={String(dataKey)}
+                    name={String(displayName)}
                     type="linear"
-                    dataKey={category}
+                    dataKey={String(dataKey)}
                     stroke=""
                     strokeWidth={2}
                     strokeLinejoin="round"
@@ -955,27 +972,31 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
             })}
             {/* hidden lines to increase clickable target area */}
             {onValueChange
-              ? categories.map((category) => (
-                  <Line
-                    className={cx("cursor-pointer")}
-                    strokeOpacity={0}
-                    key={category}
-                    name={category}
-                    type="linear"
-                    dataKey={category}
-                    stroke="transparent"
-                    fill="transparent"
-                    legendType="none"
-                    tooltipType="none"
-                    strokeWidth={12}
-                    connectNulls={connectNulls}
-                    onClick={(props: any, event) => {
-                      event.stopPropagation()
-                      const { name } = props
-                      onCategoryClick(name)
-                    }}
-                  />
-                ))
+              ? (categories as Array<any>).map((category) => {
+                  const dataKey = typeof category === "string" ? category : category.key
+                  const displayName = typeof category === "string" ? category : category.label
+                  return (
+                    <Line
+                      className={cx("cursor-pointer")}
+                      strokeOpacity={0}
+                      key={String(dataKey)}
+                      name={String(displayName)}
+                      type="linear"
+                      dataKey={String(dataKey)}
+                      stroke="transparent"
+                      fill="transparent"
+                      legendType="none"
+                      tooltipType="none"
+                      strokeWidth={12}
+                      connectNulls={connectNulls}
+                      onClick={(props: any, event) => {
+                        event.stopPropagation()
+                        const { name } = props
+                        onCategoryClick(name)
+                      }}
+                    />
+                  )
+                })
               : null}
           </RechartsAreaChart>
         </ResponsiveContainer>

@@ -3,6 +3,8 @@ name: Publish fetchtime image for production
 on:
   push:
     branches: [main]
+    paths:
+      - 'fetchtime/**'
 
 env:
   REGISTRY: ghcr.io

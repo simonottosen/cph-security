@@ -3,6 +3,8 @@ name: Publish NextJS image for production
 on:
   push:
     branches: [main]
+    paths:
+      - 'waitport/**'
 
 env:
   REGISTRY: ghcr.io

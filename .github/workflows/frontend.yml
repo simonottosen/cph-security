@@ -3,6 +3,8 @@ name: Publish frontend image for production
 on:
   push:
     branches: [main]
+    paths:
+      - 'frontend-nextgen/**'
 
 env:
   REGISTRY: ghcr.io

@@ -3,8 +3,12 @@ name: Publish Autogluon image for production
 on:
   push:
     branches: [main]
+    paths:
+      - 'autogluon/**'
   pull_request:
     branches: [main]
+    paths:
+      - 'autogluon/**'
 
 env:
   REGISTRY: ghcr.io

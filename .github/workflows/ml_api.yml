@@ -3,6 +3,8 @@ name: Publish ML API image for production
 on:
   push:
     branches: [main]
+    paths:
+      - 'ml_api/**'
 
 env:
   REGISTRY: ghcr.io

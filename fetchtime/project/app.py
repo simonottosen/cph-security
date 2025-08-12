@@ -180,14 +180,19 @@ def munich():
     
     for datas in waitingtime["queueTimes"]["current"]:
         if datas["queueId"] == "T2_Abflug_SIKO_ECO_NORD":
-            numbers = datas["projectedWaitTime"]
-            if numbers < 0 or numbers == 0.0:
-                numbers = numbers = 0
-            numbers = round(numbers)
-            if isinstance(numbers, int):
-                queue = numbers   # Assign a value to queue
+            raw_value = datas["projectedWaitTime"]
+
+            # Guard against missing or negative values
+            if raw_value is None or raw_value <= 0:
+                queue = 0
             else:
-                print("Error: Information not found in the JSON data.")
+                # If the reported value is greater than 10, treat it as **seconds**
+                # and convert to minutes, but ensure the final queue time is at least 4 minutes.
+                if raw_value > 10:
+                    queue = max(4, round(raw_value / 60))
+                else:
+                    # Otherwise the value is already in minutes
+                    queue = round(raw_value)
     
     process_airport_result(queue, airport, healthcheck)
 

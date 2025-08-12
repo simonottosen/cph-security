@@ -92,11 +92,12 @@ export default function LanguageSwitcher({ initialLocale }: { initialLocale?: st
         onClick={() => setOpen((s) => !s)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="inline-flex items-center gap-2 rounded-full bg-white/90 dark:bg-gray-900/90 px-3 py-1 ring-1 ring-gray-200 dark:ring-gray-800 shadow-sm hover:shadow-md transition"
+        aria-label={`Change language (${localeMeta.label})`}
+        className="inline-flex items-center gap-2 rounded-full bg-white/90 dark:bg-gray-900/90 p-2 sm:px-3 sm:py-1 ring-1 ring-gray-200 dark:ring-gray-800 shadow-sm hover:shadow-md transition"
       >
         <span className="text-lg">{localeMeta.flag}</span>
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{localeMeta.label}</span>
-        <svg className="w-3 h-3 text-gray-500" viewBox="0 0 20 20" fill="none" aria-hidden>
+        <span className="hidden sm:inline text-sm font-medium text-gray-700 dark:text-gray-200">{localeMeta.label}</span>
+        <svg className="hidden sm:block w-3 h-3 text-gray-500" viewBox="0 0 20 20" fill="none" aria-hidden>
           <path d="M6 7l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>

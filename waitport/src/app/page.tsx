@@ -264,7 +264,7 @@ const Home: React.FC = () => {
           <h1 className="text-5xl md:text-6xl font-extrabold text-gray-900 dark:text-gray-100 tracking-tight mb-6">
             Waitport&nbsp;🛫
           </h1>
-          <p className="max-w-2xl mx-auto text-xl md:text-2xl text-gray-600 dark:text-gray-300">
+          <p className="mx-auto px-5 sm:px-0 max-w-[42ch] sm:max-w-2xl text-lg sm:text-xl md:text-2xl text-gray-600 dark:text-gray-300">
             {t('home.description')}
           </p>
         </section>

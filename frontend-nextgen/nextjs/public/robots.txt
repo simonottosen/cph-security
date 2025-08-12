@@ -1,9 +1,0 @@
-# *
-User-agent: *
-Allow: /
-
-# Host
-Host: https://waitport.com
-
-# Sitemaps
-Sitemap: https://waitport.com/sitemap.xml

@@ -178,22 +178,38 @@ def munich():
     response = requests.get(airport_api)
     waitingtime = json.loads(response.text)
     
-    for datas in waitingtime["queueTimes"]["current"]:
-        if datas["queueId"] == "T2_Abflug_SIKO_ECO_NORD":
-            raw_value = datas["projectedWaitTime"]
+    # ------------------------------------------------------------------
+    # Pick the *better* of the two Economy checkpoints (North vs South)
+    # Normalise (convert “seconds” → minutes with ≥ 4‑min floor)
+    # **only** if BOTH raw readings are > 20.
+    # ------------------------------------------------------------------
+    eco_ids = ("T2_Abflug_SIKO_ECO_NORD", "T2_Abflug_SIKO_ECO_SUED")
+    raw_values: dict[str, int] = {}
 
-            # Guard against missing or negative values
-            if raw_value is None or raw_value <= 0:
-                queue = 0
-            else:
-                # If the reported value is greater than 10, treat it as **seconds**
-                # and convert to minutes, but ensure the final queue time is at least 4 minutes.
-                if raw_value > 10:
-                    queue = max(4, round(raw_value / 60))
-                else:
-                    # Otherwise the value is already in minutes
-                    queue = round(raw_value)
-    
+    # Collect raw wait times for the two ECO queues
+    for entry in waitingtime["queueTimes"]["current"]:
+        qid = entry.get("queueId")
+        if qid in eco_ids:
+            raw = entry.get("projectedWaitTime")
+            # Skip missing, zero or negative readings
+            if raw is not None and raw > 0:
+                raw_values[qid] = raw
+
+    # Decide if we should normalise (treat numbers as SECONDS)
+    normalise = len(raw_values) == 2 and all(val > 20 for val in raw_values.values())
+
+    # Convert to minutes (with clamping) or keep as‑is
+    eco_waits: list[int] = []
+    for val in raw_values.values():
+        if normalise:
+            minutes = max(4, round(val / 60))
+        else:
+            minutes = round(val)
+        eco_waits.append(minutes)
+
+    # Use the shorter queue; default to 0 if none are valid
+    queue = min(eco_waits) if eco_waits else 0
+
     process_airport_result(queue, airport, healthcheck)
 
 

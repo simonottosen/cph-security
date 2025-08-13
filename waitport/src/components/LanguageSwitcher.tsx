@@ -7,6 +7,7 @@ import { useI18n } from "@/i18n/I18nProvider";
 const LOCALES: { code: string; label: string; flag: string }[] = [
   { code: "en", label: "English", flag: "🇬🇧" },
   { code: "da", label: "Dansk", flag: "🇩🇰" },
+  { code: "de", label: "Deutsch", flag: "🇩🇪" },
 ];
 
 export default function LanguageSwitcher({ initialLocale }: { initialLocale?: string }) {
@@ -16,7 +17,7 @@ export default function LanguageSwitcher({ initialLocale }: { initialLocale?: st
 
   const segs = pathname.split("/").filter(Boolean);
   // derive default from path
-  const pathDerived = segs[0] === "da" ? "da" : "en";
+  const pathDerived = segs[0] === "da" || segs[0] === "de" ? segs[0] : "en";
 
   // If a server-provided initialLocale was passed, prefer that for SSR/SSG initial render.
   // useI18n is a client hook and may throw if provider is missing, so call safely.
@@ -35,7 +36,7 @@ export default function LanguageSwitcher({ initialLocale }: { initialLocale?: st
   // Keep the switcher's label in sync with the URL (locale segment takes precedence)
   React.useEffect(() => {
     // If the first URL segment is an explicit locale, trust that
-    const explicit = segs[0] === "da" || segs[0] === "en" ? segs[0] : undefined;
+    const explicit = segs[0] === "da" || segs[0] === "de" || segs[0] === "en" ? segs[0] : undefined;
     const desired = explicit ?? initialLocale ?? providerLocale ?? pathDerived;
 
     if (desired && desired !== currentLocale) {
@@ -52,8 +53,13 @@ export default function LanguageSwitcher({ initialLocale }: { initialLocale?: st
     if (initialLocale || providerLocale) return;       // server already picked a locale
     try {
       const nav = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language];
-      if (nav.some((l: string) => l && l.toLowerCase().startsWith("da"))) {
+      const lower = nav.map((l: string) => (l || "").toLowerCase());
+      // Pick the first supported language that appears in the user's preferences
+      const firstMatch = lower.find((l: string) => l.startsWith("da") || l.startsWith("de"));
+      if (firstMatch?.startsWith("da")) {
         setCurrentLocale("da");
+      } else if (firstMatch?.startsWith("de")) {
+        setCurrentLocale("de");
       }
     } catch {
       // ignore
@@ -62,7 +68,7 @@ export default function LanguageSwitcher({ initialLocale }: { initialLocale?: st
 
   // Remove existing locale prefix if present
   let withoutLocaleSegments = segs;
-  if (segs[0] === "en" || segs[0] === "da") {
+  if (segs[0] === "en" || segs[0] === "da" || segs[0] === "de") {
     withoutLocaleSegments = segs.slice(1);
   }
   const basePath = "/" + withoutLocaleSegments.join("/");

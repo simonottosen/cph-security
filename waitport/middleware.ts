@@ -3,14 +3,15 @@ import type { NextRequest } from 'next/server';
 
 /**
  * Simple Accept-Language parser: returns the preferred language code (first token)
- * e.g. "da,en;q=0.9" -> "da"
+ * e.g. "da,en;q=0.9" -> "da", "de-DE,en;q=0.8" -> "de"
  */
 function preferredLocale(acceptLang: string | null): string {
   if (!acceptLang) return 'en';
   const parts = acceptLang.split(',');
   if (!parts.length) return 'en';
-  const first = parts[0].trim().toLowerCase(); // e.g. "da" or "da-dk"
+  const first = parts[0].trim().toLowerCase(); // e.g. "da", "de-de", "da-dk"
   if (first.startsWith('da')) return 'da';
+  if (first.startsWith('de')) return 'de';
   return 'en';
 }
 
@@ -38,8 +39,8 @@ export function middleware(req: NextRequest) {
     return;
   }
 
-  // If path already includes locale prefix (/en/ or /da/), do nothing.
-  if (pathname.startsWith('/en') || pathname.startsWith('/da')) {
+  // If path already includes locale prefix (/en, /da, or /de), do nothing.
+  if (pathname.startsWith('/en') || pathname.startsWith('/da') || pathname.startsWith('/de')) {
     return;
   }
 

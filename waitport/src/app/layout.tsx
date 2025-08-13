@@ -34,16 +34,17 @@ export default async function RootLayout({
   const nextLocale = hdrs.get?.("x-nextjs-locale") ?? undefined;
   const acceptLang = (hdrs.get?.("accept-language") ?? "") as string;
 
-  // Parse Accept-Language by taking the first token (highest priority).
-  // e.g. "en-US,en;q=0.9,da;q=0.8" -> "en-US" -> English
-  const parsePreferredLocale = (al: string) => {
-    if (!al) return "en";
-    const first = al.split(",")[0].trim().toLowerCase();
+  // Normalize a locale-ish string ("de-DE", "da", "en-US,en;q=0.9") to our supported codes.
+  const normalizeLocale = (val?: string | null): "en" | "da" | "de" | undefined => {
+    if (!val) return undefined;
+    const first = val.split(",")[0].trim().toLowerCase(); // take first token
     if (first.startsWith("da")) return "da";
-    return "en";
+    if (first.startsWith("de")) return "de";
+    if (first.startsWith("en")) return "en";
+    return undefined;
   };
 
-  const locale = nextLocale ?? parsePreferredLocale(acceptLang);
+  const locale = normalizeLocale(nextLocale) ?? normalizeLocale(acceptLang) ?? "en";
 
   // Load messages for the resolved locale
   let messages: Record<string, any> = {};

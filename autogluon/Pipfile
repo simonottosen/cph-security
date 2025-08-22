@@ -14,7 +14,7 @@ python-dateutil = "*"
 holidays = "*"
 flask = "*"
 apscheduler = "*"
-autogluon = {version = "*", extras = ["timeseries"]}
+autogluon = {version = "==1.4.0", extras = ["timeseries"]}
 python-dotenv = "*"
 pytest = "*"
 

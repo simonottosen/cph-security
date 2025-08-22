@@ -10,6 +10,8 @@ autogluon-m4-hourly/
 *.png
 cph.json
 chronos_bolt_base/
+all.json
+models/
 
 # C extensions
 *.so

@@ -8,9 +8,10 @@ import holidays
 from flask import Flask, request, jsonify
 from flask_caching import Cache
 from flask_crontab import Crontab
-from datetime import datetime, timedelta
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error
+
+from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 import xgboost as xgb
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -82,7 +83,8 @@ def get_data_via_supabase_client() -> pd.DataFrame:
         supabase
         .table("waitingtime")
         .select("id,queue,timestamp,airport")
-        .neq("airport", "BER,OSL")  # Exclude BER and OSL
+        .neq("airport", "BER")   # Exclude BER
+        .neq("airport", "OSL")   # Exclude OSL
         .order("id", desc=True)
         .execute()
     )
@@ -112,7 +114,7 @@ def get_data_via_local_database() -> pd.DataFrame:
         dfs.append(df_ap)
     
     df = pd.concat(dfs, ignore_index=True)
-    print("Loaded ALL data successfully from local database in %.2f seconds " % (time.time() - start_time_load_data))
+    logger.info("Loaded ALL data successfully from local database in %.2f seconds", time.time() - start_time_load_data)
     return df
 
 # ------------------------------------------------------------------------------
@@ -131,9 +133,11 @@ def get_data_via_local_database_light() -> pd.DataFrame:
     num_days = 7
     
     # Calculate the start time in UTC (e.g., 7 days ago)
-    end_time_utc = datetime.utcnow()
+    end_time_utc = datetime.now(timezone.utc)
     start_time_utc = end_time_utc - timedelta(days=num_days)
-    start_time_str = start_time_utc.isoformat()  # e.g. 2025-02-03T12:34:56.789123
+    # Use an explicit Z timezone marker and URL-encode the timestamp for the query
+    start_time_str = start_time_utc.isoformat().replace("+00:00", "Z")
+    start_time_param = quote(start_time_str, safe="")
 
     airports = ["CPH", "ARN", "DUS", "FRA", "MUC", "LHR", "AMS", "DUB", "IST", "EDI"]
     
@@ -144,38 +148,140 @@ def get_data_via_local_database_light() -> pd.DataFrame:
             f"?order=id.desc"
             f"&select=id,queue,timestamp,airport"
             f"&airport=eq.{airport_code}"
-            f"&timestamp=gte.{start_time_str}"
+            f"&timestamp=gte.{start_time_param}"
         )
         df_ap = pd.read_json(url)
         dfs.append(df_ap)
     
     df = pd.concat(dfs, ignore_index=True)
-    print("Loaded LIGHT data (last 7 days) from local database in %.2f seconds " % (time.time() - start_time_load_data))
+    logger.info("Loaded LIGHT data (last 7 days) from local database in %.2f seconds", time.time() - start_time_load_data)
     return df
 
 # ------------------------------------------------------------------------------
 # Flask App Setup
 # ------------------------------------------------------------------------------
 app = Flask(__name__)
-cache = Cache(app, config={'CACHE_TYPE': 'simple'})
-crontab = Crontab(app)
+cache = Cache(app, config={'CACHE_TYPE': 'simple', 'CACHE_DEFAULT_TIMEOUT': 300})  # default TTL: 5 minutes
+# crontab/training removed from the API process; use a separate trainer service (CronJob) instead.
 
 # ------------------------------------------------------------------------------
 # Utility Functions
 # ------------------------------------------------------------------------------
 def add_holiday_feature(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Add a 'Holiday' feature (1/0) indicating if a day is a local holiday
-    for the airport corresponding to each row.
+    Vectorized Holiday feature: sets 1 if the timestamp's date is a local holiday
+    for the airport indicated in the row. This avoids row-wise apply().
     """
-    def is_local_holiday(row):
-        for ap, holiday_obj in airport_holiday_map.items():
-            if ap in row.index and row[ap] == 1:
-                dt = row.name.date()
-                return int(dt in holiday_obj)
-        return 0
+    if df.empty:
+        df['Holiday'] = 0
+        return df
 
-    df['Holiday'] = df.apply(is_local_holiday, axis=1)
+    # Dates as datetime.date
+    date_index = pd.Index(df.index.date)
+    holiday_flags = np.zeros(len(df), dtype=np.int8)
+
+    for ap, cal in airport_holiday_map.items():
+        if ap in df.columns:
+            # boolean mask where this airport is active for the row
+            ap_mask = df[ap].to_numpy(dtype=bool)
+            # create set of holiday dates for fast membership testing
+            hol_dates = set(cal.keys())
+            # vectorized date membership
+            date_mask = np.array([d in hol_dates for d in date_index], dtype=bool)
+            combined = ap_mask & date_mask
+            holiday_flags = holiday_flags | combined.astype(np.int8)
+
+    df['Holiday'] = holiday_flags
+    return df
+
+def add_lag_features(df: pd.DataFrame, lags=(1,2,3,6,12)) -> pd.DataFrame:
+    """
+    Create per-airport lag features named '{airport}_lag_{L}' where L is number of rows back.
+    This assumes the index is time-ordered.
+    """
+    for airport_code in VALID_AIRPORTS:
+        if airport_code not in df.columns:
+            continue
+        airport_data = df[df[airport_code] == 1].copy()
+        if airport_data.empty:
+            # still create columns to keep a consistent schema
+            for L in lags:
+                df[f'{airport_code}_lag_{L}'] = 0.0
+            continue
+
+        airport_data = airport_data.sort_index()
+        for L in lags:
+            df.loc[airport_data.index, f'{airport_code}_lag_{L}'] = airport_data['queue'].shift(L)
+
+    # Fill NaNs produced by shifting with 0.0 (training will drop initial NaNs if needed)
+    lag_cols = [c for c in df.columns if c.endswith(tuple([f'_lag_{L}' for L in lags]))]
+    for col in lag_cols:
+        if col in df.columns:
+            df[col] = df[col].fillna(0.0)
+    return df
+
+def preprocess_dataframe(dataframe: pd.DataFrame) -> pd.DataFrame:
+    """
+    Centralized preprocessing shared by get_data() and get_data_light():
+      - timezone conversion
+      - indexing and dedup/tiebreaker
+      - time features
+      - airport one-hot
+      - rolling features per airport
+      - holiday feature
+      - cyclical features and is_weekend
+      - lag features (per airport)
+      - basic cleaning (id drop, queue numeric & NaN drop)
+    """
+    if dataframe.empty:
+        return pd.DataFrame()
+
+    # Convert timestamps from UTC to Europe/Copenhagen and set index
+    StartTime = pd.to_datetime(dataframe["timestamp"], utc=True)
+    StartTime = StartTime.dt.tz_convert('Europe/Copenhagen')
+    dataframe = dataframe.assign(timestamp=StartTime)
+
+    df = dataframe.set_index("timestamp").sort_index()
+    df.index = df.index + pd.to_timedelta(df.groupby(level=0).cumcount(), unit='ns')
+
+    # Basic time features
+    df['year'] = df.index.year
+    df['hour'] = df.index.hour
+    df['day'] = df.index.day
+    df['month'] = df.index.month
+    df['weekday'] = df.index.weekday
+
+    # airport one-hot
+    if 'airport' in df.columns:
+        df_airport = pd.get_dummies(df['airport'])
+        df = pd.concat([df, df_airport], axis=1).drop(columns=['airport'])
+
+    # rolling features per airport
+    for airport_code in VALID_AIRPORTS:
+        if airport_code in df.columns:
+            _compute_rolling_features(df, airport_code)
+
+    # holiday
+    df = add_holiday_feature(df)
+
+    # cyclical time features and weekend flag
+    df['hour_sin'] = np.sin(2 * np.pi * df['hour'] / 24)
+    df['hour_cos'] = np.cos(2 * np.pi * df['hour'] / 24)
+    df['dow_sin']  = np.sin(2 * np.pi * df['weekday'] / 7)
+    df['dow_cos']  = np.cos(2 * np.pi * df['weekday'] / 7)
+    df['is_weekend'] = (df['weekday'] >= 5).astype(int)
+
+    # lag features per airport
+    df = add_lag_features(df)
+
+    # housekeeping
+    if 'id' in df.columns:
+        df.drop(['id'], axis=1, inplace=True)
+
+    df['queue'] = pd.to_numeric(df['queue'], errors='coerce')
+    df['queue'] = df['queue'].apply(lambda x: np.nan if x > 1e10 else x)
+    df.dropna(subset=['queue'], inplace=True)
+
     return df
 
 def _compute_rolling_features(df: pd.DataFrame, airport_code: str) -> None:
@@ -226,35 +332,8 @@ def get_data():
         logger.error(f"Error fetching data: {e}")
         return pd.DataFrame()
 
-    # Convert timestamps from UTC to Europe/Copenhagen
-    StartTime = pd.to_datetime(dataframe["timestamp"], utc=True)
-    StartTime = StartTime.dt.tz_convert('Europe/Copenhagen')
-    dataframe["timestamp"] = StartTime
-    
-    df = dataframe.set_index("timestamp")
-    df.sort_index(inplace=True)
-    df.index = df.index + pd.to_timedelta(df.groupby(level=0).cumcount(), unit='ns')
-
-    df['year'] = df.index.year
-    df['hour'] = df.index.hour
-    df['day'] = df.index.day
-    df['month'] = df.index.month
-    df['weekday'] = df.index.weekday
-
-    df_airport = pd.get_dummies(df['airport'])
-    df = pd.concat([df, df_airport], axis=1).drop(columns=['airport'])
-
-    for airport_code in VALID_AIRPORTS:
-        if airport_code in df.columns:
-            _compute_rolling_features(df, airport_code)
-
-    df = add_holiday_feature(df)
-
-    if 'id' in df.columns:
-        df.drop(['id'], axis=1, inplace=True)
-
-    df['queue'] = df['queue'].apply(lambda x: np.nan if x > 1e10 else x)
-    df.dropna(subset=['queue'], inplace=True)
+    # Centralized preprocessing
+    df = preprocess_dataframe(dataframe)
 
     logger.info("Fetched & preprocessed FULL dataset in %.2f seconds", time.time() - start_time)
     return df
@@ -279,34 +358,8 @@ def get_data_light():
         logger.error(f"Error fetching light data: {e}")
         return pd.DataFrame()
 
-    StartTime = pd.to_datetime(dataframe["timestamp"], utc=True)
-    StartTime = StartTime.dt.tz_convert('Europe/Copenhagen')
-    dataframe["timestamp"] = StartTime
-    
-    df = dataframe.set_index("timestamp")
-    df.sort_index(inplace=True)
-    df.index = df.index + pd.to_timedelta(df.groupby(level=0).cumcount(), unit='ns')
-
-    df['year'] = df.index.year
-    df['hour'] = df.index.hour
-    df['day'] = df.index.day
-    df['month'] = df.index.month
-    df['weekday'] = df.index.weekday
-
-    df_airport = pd.get_dummies(df['airport'])
-    df = pd.concat([df, df_airport], axis=1).drop(columns=['airport'])
-
-    for airport_code in VALID_AIRPORTS:
-        if airport_code in df.columns:
-            _compute_rolling_features(df, airport_code)
-
-    df = add_holiday_feature(df)
-
-    if 'id' in df.columns:
-        df.drop(['id'], axis=1, inplace=True)
-
-    df['queue'] = df['queue'].apply(lambda x: np.nan if x > 1e10 else x)
-    df.dropna(subset=['queue'], inplace=True)
+    # Centralized preprocessing
+    df = preprocess_dataframe(dataframe)
 
     logger.info("Fetched & preprocessed LIGHT dataset in %.2f seconds", time.time() - start_time)
     return df
@@ -364,29 +417,55 @@ def train_models():
             joblib.dump(fallback, f'trained_model_{airport_code}.joblib')
             continue
 
-        try:
-            X_train = train_df.drop('queue', axis=1)
-            y_train = train_df['queue']
-            X_test  = test_df.drop('queue', axis=1)
-            y_test  = test_df['queue']
+            try:
+                X_train = train_df.drop('queue', axis=1)
+                y_train = train_df['queue']
+                X_test  = test_df.drop('queue', axis=1)
+                y_test  = test_df['queue']
 
-            model = xgb.XGBRegressor(
-                objective='reg:squarederror',
-                random_state=7
-            )
-            model.fit(X_train, y_train)
+                # Drop airport one-hot columns for per-airport training (they are constant)
+                airport_cols = [ap for ap in VALID_AIRPORTS if ap in X_train.columns]
+                X_train = X_train.drop(columns=airport_cols, errors='ignore')
+                X_test = X_test.drop(columns=airport_cols, errors='ignore')
 
-            if not X_test.empty:
-                y_pred = model.predict(X_test)
-                mse = mean_squared_error(y_test, y_pred)
-                logger.info(f"{airport_code} - MSE: {mse:.2f}")
+                # Ensure lag columns exist
+                lag_cols = [f'{airport_code}_lag_{L}' for L in (1,2,3,6,12)]
+                for lc in lag_cols:
+                    if lc not in X_train.columns:
+                        X_train[lc] = 0.0
+                        X_test[lc] = 0.0
 
-            joblib.dump(model, f'trained_model_{airport_code}.joblib')
-            logger.info(f"Model for {airport_code} saved.")
-        except Exception as e:
-            logger.error(f"Error training {airport_code}, using fallback. Error: {e}")
-            fallback = FallbackRegressor()
-            joblib.dump(fallback, f'trained_model_{airport_code}.joblib')
+                model = xgb.XGBRegressor(
+                    objective='reg:squarederror',
+                    tree_method='hist',
+                    n_estimators=1000,
+                    learning_rate=0.05,
+                    max_depth=6,
+                    subsample=0.8,
+                    colsample_bytree=0.8,
+                    reg_lambda=1.0,
+                    random_state=7,
+                )
+                model.fit(
+                    X_train, y_train,
+                    eval_set=[(X_test, y_test)],
+                    early_stopping_rounds=50,
+                    verbose=False
+                )
+
+                if not X_test.empty:
+                    y_pred = model.predict(X_test)
+                    mse = mean_squared_error(y_test, y_pred)
+                    rmse = mean_squared_error(y_test, y_pred, squared=False)
+                    mae = mean_absolute_error(y_test, y_pred)
+                    logger.info(f"{airport_code} - MAE: {mae:.2f} RMSE: {rmse:.2f} MSE: {mse:.2f}")
+
+                joblib.dump(model, f'trained_model_{airport_code}.joblib')
+                logger.info(f"Model for {airport_code} saved.")
+            except Exception as e:
+                logger.error(f"Error training {airport_code}, using fallback. Error: {e}")
+                fallback = FallbackRegressor()
+                joblib.dump(fallback, f'trained_model_{airport_code}.joblib')
 
     logger.info("Finished training in %.2f seconds", time.time() - start_time)
 
@@ -394,6 +473,7 @@ def load_model_for_airport(airport_code: str):
     """
     Load model from 'trained_model_{airport_code}.joblib'.
     If file not found or error, return FallbackRegressor(5).
+    Models should be produced by an external trainer and persisted to storage.
     """
     try:
         model = joblib.load(f"trained_model_{airport_code}.joblib")
@@ -428,21 +508,31 @@ def predict_queue(timestamp_df: pd.DataFrame) -> float:
     timestamp_df['month'] = timestamp_df.index.month
     timestamp_df['weekday'] = timestamp_df.index.weekday
 
+    # cyclical encoding for hour and day-of-week and weekend flag
+    timestamp_df['hour_sin'] = np.sin(2 * np.pi * timestamp_df['hour'] / 24)
+    timestamp_df['hour_cos'] = np.cos(2 * np.pi * timestamp_df['hour'] / 24)
+    timestamp_df['dow_sin']  = np.sin(2 * np.pi * timestamp_df['weekday'] / 7)
+    timestamp_df['dow_cos']  = np.cos(2 * np.pi * timestamp_df['weekday'] / 7)
+    timestamp_df['is_weekend'] = (timestamp_df['weekday'] >= 5).astype(int)
+
     # 3) One-hot
     for ap in VALID_AIRPORTS:
         timestamp_df[ap] = 1 if ap == airport else 0
 
-    # 4) Rolling features from LIGHT data
+    # 4) Rolling features from LIGHT data + short lags
     df_light = get_data_light()
+    lag_list = (1,2,3,6,12)
     if df_light.empty:
         rolling_24h_val = 0.0
         rolling_7d_val  = 0.0
+        lag_vals = {L: 0.0 for L in lag_list}
     else:
         cutoff_time = modeldatetime.iloc[0]
         airport_df = df_light[(df_light[airport] == 1) & (df_light.index <= cutoff_time)].copy()
         if airport_df.empty:
             rolling_24h_val = 0.0
             rolling_7d_val  = 0.0
+            lag_vals = {L: 0.0 for L in lag_list}
         else:
             airport_df.sort_index(inplace=True)
             airport_df['rolling_24h'] = airport_df['queue'].rolling('24h', min_periods=1).mean()
@@ -452,6 +542,15 @@ def predict_queue(timestamp_df: pd.DataFrame) -> float:
             rolling_24h_val = last_row['rolling_24h'] if not pd.isna(last_row['rolling_24h']) else 0.0
             rolling_7d_val  = last_row['rolling_7d']  if not pd.isna(last_row['rolling_7d']) else 0.0
 
+            # compute simple lag values from the most recent rows (lag=1 is the last observed queue)
+            lag_vals = {}
+            for L in lag_list:
+                if len(airport_df) >= L:
+                    lag_vals[L] = airport_df['queue'].iloc[-L]
+                else:
+                    lag_vals[L] = 0.0
+
+    # set the airport's rolling features
     timestamp_df[f'{airport}_rolling_24h'] = rolling_24h_val
     timestamp_df[f'{airport}_rolling_7d']  = rolling_7d_val
 
@@ -460,6 +559,14 @@ def predict_queue(timestamp_df: pd.DataFrame) -> float:
         if ap != airport:
             timestamp_df[f'{ap}_rolling_24h'] = 0.0
             timestamp_df[f'{ap}_rolling_7d']  = 0.0
+
+    # set lag features for this airport and zeros for others
+    for L, val in lag_vals.items():
+        timestamp_df[f'{airport}_lag_{L}'] = val
+    for ap in VALID_AIRPORTS:
+        if ap != airport:
+            for L in lag_list:
+                timestamp_df[f'{ap}_lag_{L}'] = 0.0
 
     # 5) Holiday feature
     timestamp_df = add_holiday_feature(timestamp_df)
@@ -474,8 +581,8 @@ def predict_queue(timestamp_df: pd.DataFrame) -> float:
 
     # 8) Predict
     prediction = model.predict(timestamp_df)
-    prediction = prediction + 1  # final offset
-    return round(prediction[0])
+    # Do not bias predictions with an arbitrary offset. Round to nearest integer minute.
+    return int(round(prediction[0]))
 
 # ------------------------------------------------------------------------------
 # Flask Routes
@@ -526,12 +633,17 @@ def make_prediction():
     return jsonify(response)
 
 # ------------------------------------------------------------------------------
-# Crontab Job for Retraining
+# Crontab Job for Retraining (always enabled)
 # ------------------------------------------------------------------------------
+# The application will always register a daily retrain job using flask-crontab.
+# If you don't want in-app scheduling, run the process without long-running container
+# or remove/disable this section externally.
+crontab = Crontab(app)
+
 @crontab.job(minute=0, hour=0)
 def scheduled_training():
     """
-    Daily re-training (midnight). Customize as needed.
+    Daily re-training (midnight). Runs inside the app process.
     """
     logger.info(f'Crontab triggered: retraining models at {datetime.now()}')
     train_models()
@@ -541,8 +653,7 @@ def scheduled_training():
 # ------------------------------------------------------------------------------
 with app.app_context():
     logger.info("Initializing application...")
-    # Optionally train all models once on startup
-    train_models()
+    # Training on startup is disabled. Models should be prepared by a separate trainer process and available on disk or object storage.
 
 # ------------------------------------------------------------------------------
 # Main

@@ -58,6 +58,7 @@ os.makedirs(MODELS_DIR, exist_ok=True)
 # ------------------------------------------------------------------------------
 # A Fallback Regressor that Always Returns 5
 # ------------------------------------------------------------------------------
+
 class FallbackRegressor(BaseEstimator, RegressorMixin):
     """A fallback regressor that always returns 5."""
     def __init__(self, constant=5):
@@ -68,6 +69,24 @@ class FallbackRegressor(BaseEstimator, RegressorMixin):
 
     def predict(self, X):
         return np.full(shape=(len(X),), fill_value=self.constant)
+
+# ------------------------------------------------------------------------------
+# Adapter for Booster Model: Uniform .predict(X_df)
+# ------------------------------------------------------------------------------
+class BoosterPredictor:
+    """Adapter providing a sklearn-like .predict(X_df) for an xgboost Booster.
+    Not pickled: we construct it at load time from saved payload.
+    """
+    def __init__(self, booster, feature_names, best_iteration=None):
+        self.booster = booster
+        self.feature_names = feature_names
+        self.best_iteration = best_iteration
+
+    def predict(self, X):
+        dm = xgb.DMatrix(X[self.feature_names])
+        if self.best_iteration is not None:
+            return self.booster.predict(dm, iteration_range=(0, self.best_iteration + 1))
+        return self.booster.predict(dm)
 
 # ------------------------------------------------------------------------------
 # Utility: Get Data from Supabase (Full)
@@ -439,74 +458,65 @@ def train_models():
                     X_train[lc] = 0.0
                     X_test[lc] = 0.0
 
-            model = xgb.XGBRegressor(
-                objective='reg:squarederror',
-                tree_method='hist',
-                n_estimators=1000,
-                learning_rate=0.05,
-                max_depth=6,
-                subsample=0.8,
-                colsample_bytree=0.8,
-                reg_lambda=1.0,
-                random_state=7,
-            )
-            # Ensure eval metric is set for consistent reporting
-            model.set_params(eval_metric='rmse')
+            # --- Train with native Booster API + early stopping ---
+            feature_names = X_train.columns.tolist()
+            dtrain = xgb.DMatrix(X_train, label=y_train, feature_names=feature_names)
+            dvalid = xgb.DMatrix(X_test,  label=y_test,  feature_names=feature_names) if not X_test.empty else None
 
-            # Try multiple fit signatures to support different xgboost versions:
-            # 1) fit(..., early_stopping_rounds=...)
-            # 2) fit(..., callbacks=[EarlyStopping(...)] )
-            # 3) fallback: fit(...) without early stopping
-            fitted = False
-            try:
-                model.fit(
-                    X_train, y_train,
-                    eval_set=[(X_test, y_test)],
+            params = {
+                "objective": "reg:squarederror",
+                "tree_method": "hist",
+                "eta": 0.05,
+                "max_depth": 6,
+                "subsample": 0.8,
+                "colsample_bytree": 0.8,
+                "reg_lambda": 1.0,
+                "eval_metric": "rmse",
+                "seed": 7,
+            }
+
+            if dvalid is not None:
+                bst = xgb.train(
+                    params,
+                    dtrain,
+                    num_boost_round=1000,
+                    evals=[(dvalid, "valid")],
                     early_stopping_rounds=50,
-                    verbose=False
+                    verbose_eval=False,
                 )
-                fitted = True
-            except TypeError as te:
-                # Some xgboost versions do not accept early_stopping_rounds kwarg
-                logger.debug(f"early_stopping_rounds not supported: {te}")
-                try:
-                    from xgboost.callback import EarlyStopping
-                    callbacks = [EarlyStopping(rounds=50, metric_name='rmse', data_name='validation_0')]
-                    model.fit(
-                        X_train, y_train,
-                        eval_set=[(X_test, y_test)],
-                        callbacks=callbacks,
-                        verbose=False
-                    )
-                    fitted = True
-                except Exception as e:
-                    logger.warning(f"Callback-based early stopping failed: {e}. Falling back to fit without early stopping.")
-            except Exception as e:
-                logger.warning(f"fit with early_stopping_rounds failed: {e}. Trying fallback methods.")
-
-            if not fitted:
-                # Final fallback: no early stopping
-                model.fit(
-                    X_train, y_train,
-                    eval_set=[(X_test, y_test)],
-                    verbose=False
+            else:
+                # No validation data available; train without early stopping
+                bst = xgb.train(
+                    params,
+                    dtrain,
+                    num_boost_round=300,
+                    verbose_eval=False,
                 )
 
             if not X_test.empty:
-                y_pred = model.predict(X_test)
+                dtest = xgb.DMatrix(X_test[feature_names], label=y_test)
+                # Use best iteration if available
+                if getattr(bst, "best_iteration", None) is not None:
+                    y_pred = bst.predict(dtest, iteration_range=(0, bst.best_iteration + 1))
+                else:
+                    y_pred = bst.predict(dtest)
+
                 mse = mean_squared_error(y_test, y_pred)
                 try:
-                    # Newer scikit-learn supports the `squared` argument
                     rmse = mean_squared_error(y_test, y_pred, squared=False)
                 except TypeError:
-                    # Older scikit-learn: compute RMSE manually
                     rmse = np.sqrt(mse)
                 mae = mean_absolute_error(y_test, y_pred)
                 logger.info(f"{airport_code} - MAE: {mae:.2f} RMSE: {rmse:.2f} MSE: {mse:.2f}")
 
             save_path = os.path.join(MODELS_DIR, f'trained_model_{airport_code}.joblib')
             logger.info(f"Saving model to {save_path}")
-            joblib.dump(model, save_path)
+            payload = {
+                'booster': bst,
+                'feature_names': feature_names,
+                'best_iteration': getattr(bst, 'best_iteration', None),
+            }
+            joblib.dump(payload, save_path)
             if os.path.exists(save_path):
                 logger.info(f"Model for {airport_code} saved at {save_path}.")
             else:
@@ -527,6 +537,13 @@ def load_model_for_airport(airport_code: str):
     try:
         model = joblib.load(os.path.join(MODELS_DIR, f"trained_model_{airport_code}.joblib"))
         logger.info(f"Loaded model for {airport_code}.")
+        # If payload dict from Booster training, wrap into BoosterPredictor
+        if isinstance(model, dict) and 'booster' in model and 'feature_names' in model:
+            return BoosterPredictor(
+                booster=model['booster'],
+                feature_names=model['feature_names'],
+                best_iteration=model.get('best_iteration')
+            )
         return model
     except Exception as e:
         logger.error(f"Could not load model for {airport_code}, using fallback. Error: {e}")
@@ -627,6 +644,21 @@ def predict_queue(timestamp_df: pd.DataFrame) -> float:
 
     # 7) Sort columns
     timestamp_df = timestamp_df.reindex(sorted(timestamp_df.columns), axis=1)
+
+    # 7b) Align features with the model's training schema to avoid feature name mismatches
+    try:
+        # If using our BoosterPredictor adapter, use its feature_names
+        if hasattr(model, 'feature_names') and isinstance(getattr(model, 'feature_names'), list):
+            expected_features = model.feature_names
+            timestamp_df = timestamp_df.reindex(columns=expected_features, fill_value=0.0)
+        # If using an sklearn XGB* model, use the underlying booster feature names
+        elif hasattr(model, 'get_booster'):
+            booster = model.get_booster()
+            if getattr(booster, 'feature_names', None):
+                expected_features = booster.feature_names
+                timestamp_df = timestamp_df.reindex(columns=expected_features, fill_value=0.0)
+    except Exception as e:
+        logger.warning(f"Could not align features to model schema: {e}")
 
     # 8) Predict
     prediction = model.predict(timestamp_df)

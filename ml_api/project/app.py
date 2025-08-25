@@ -495,7 +495,12 @@ def train_models():
             if not X_test.empty:
                 y_pred = model.predict(X_test)
                 mse = mean_squared_error(y_test, y_pred)
-                rmse = mean_squared_error(y_test, y_pred, squared=False)
+                try:
+                    # Newer scikit-learn supports the `squared` argument
+                    rmse = mean_squared_error(y_test, y_pred, squared=False)
+                except TypeError:
+                    # Older scikit-learn: compute RMSE manually
+                    rmse = np.sqrt(mse)
                 mae = mean_absolute_error(y_test, y_pred)
                 logger.info(f"{airport_code} - MAE: {mae:.2f} RMSE: {rmse:.2f} MSE: {mse:.2f}")
 

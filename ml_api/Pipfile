@@ -4,16 +4,16 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-flask = "*"
-pandas = "*"
-lightgbm = "*"
-holidays = "*"
-flask-caching = "*"
-flask_crontab = "*"
-xgboost = "*"
-scikit-learn = "*"
-supabase = "*"
-python-dotenv = "*"
+flask = "==3.1.2"
+pandas = "==2.3.2"
+lightgbm = "==4.6.0"
+holidays = "==0.79"
+flask-caching = "==2.3.1"
+flask_crontab = "==0.1.2"
+xgboost = "==3.0.4"
+scikit-learn = "==1.7.1"
+supabase = "==2.18.1"
+python-dotenv = "==1.1.1"
 
 [dev-packages]
 

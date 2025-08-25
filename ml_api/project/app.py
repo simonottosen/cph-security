@@ -421,55 +421,60 @@ def train_models():
             joblib.dump(fallback, os.path.join(MODELS_DIR, f'trained_model_{airport_code}.joblib'))
             continue
 
-            try:
-                X_train = train_df.drop('queue', axis=1)
-                y_train = train_df['queue']
-                X_test  = test_df.drop('queue', axis=1)
-                y_test  = test_df['queue']
+        try:
+            X_train = train_df.drop('queue', axis=1)
+            y_train = train_df['queue']
+            X_test  = test_df.drop('queue', axis=1)
+            y_test  = test_df['queue']
 
-                # Drop airport one-hot columns for per-airport training (they are constant)
-                airport_cols = [ap for ap in VALID_AIRPORTS if ap in X_train.columns]
-                X_train = X_train.drop(columns=airport_cols, errors='ignore')
-                X_test = X_test.drop(columns=airport_cols, errors='ignore')
+            # Drop airport one-hot columns for per-airport training (they are constant)
+            airport_cols = [ap for ap in VALID_AIRPORTS if ap in X_train.columns]
+            X_train = X_train.drop(columns=airport_cols, errors='ignore')
+            X_test = X_test.drop(columns=airport_cols, errors='ignore')
 
-                # Ensure lag columns exist
-                lag_cols = [f'{airport_code}_lag_{L}' for L in (1,2,3,6,12)]
-                for lc in lag_cols:
-                    if lc not in X_train.columns:
-                        X_train[lc] = 0.0
-                        X_test[lc] = 0.0
+            # Ensure lag columns exist
+            lag_cols = [f'{airport_code}_lag_{L}' for L in (1,2,3,6,12)]
+            for lc in lag_cols:
+                if lc not in X_train.columns:
+                    X_train[lc] = 0.0
+                    X_test[lc] = 0.0
 
-                model = xgb.XGBRegressor(
-                    objective='reg:squarederror',
-                    tree_method='hist',
-                    n_estimators=1000,
-                    learning_rate=0.05,
-                    max_depth=6,
-                    subsample=0.8,
-                    colsample_bytree=0.8,
-                    reg_lambda=1.0,
-                    random_state=7,
-                )
-                model.fit(
-                    X_train, y_train,
-                    eval_set=[(X_test, y_test)],
-                    early_stopping_rounds=50,
-                    verbose=False
-                )
+            model = xgb.XGBRegressor(
+                objective='reg:squarederror',
+                tree_method='hist',
+                n_estimators=1000,
+                learning_rate=0.05,
+                max_depth=6,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                reg_lambda=1.0,
+                random_state=7,
+            )
+            model.fit(
+                X_train, y_train,
+                eval_set=[(X_test, y_test)],
+                early_stopping_rounds=50,
+                verbose=False
+            )
 
-                if not X_test.empty:
-                    y_pred = model.predict(X_test)
-                    mse = mean_squared_error(y_test, y_pred)
-                    rmse = mean_squared_error(y_test, y_pred, squared=False)
-                    mae = mean_absolute_error(y_test, y_pred)
-                    logger.info(f"{airport_code} - MAE: {mae:.2f} RMSE: {rmse:.2f} MSE: {mse:.2f}")
+            if not X_test.empty:
+                y_pred = model.predict(X_test)
+                mse = mean_squared_error(y_test, y_pred)
+                rmse = mean_squared_error(y_test, y_pred, squared=False)
+                mae = mean_absolute_error(y_test, y_pred)
+                logger.info(f"{airport_code} - MAE: {mae:.2f} RMSE: {rmse:.2f} MSE: {mse:.2f}")
 
-                joblib.dump(model, os.path.join(MODELS_DIR, f'trained_model_{airport_code}.joblib'))
-                logger.info(f"Model for {airport_code} saved.")
-            except Exception as e:
-                logger.error(f"Error training {airport_code}, using fallback. Error: {e}")
-                fallback = FallbackRegressor()
-                joblib.dump(fallback, os.path.join(MODELS_DIR, f'trained_model_{airport_code}.joblib'))
+            save_path = os.path.join(MODELS_DIR, f'trained_model_{airport_code}.joblib')
+            logger.info(f"Saving model to {save_path}")
+            joblib.dump(model, save_path)
+            if os.path.exists(save_path):
+                logger.info(f"Model for {airport_code} saved at {save_path}.")
+            else:
+                logger.error(f"Model file for {airport_code} was not found after save attempt: {save_path}")
+        except Exception as e:
+            logger.error(f"Error training {airport_code}, using fallback. Error: {e}")
+            fallback = FallbackRegressor()
+            joblib.dump(fallback, os.path.join(MODELS_DIR, f'trained_model_{airport_code}.joblib'))
 
     logger.info("Finished training in %.2f seconds", time.time() - start_time)
 

@@ -51,6 +51,10 @@ airport_holiday_map = {
 # Valid airports for reference
 VALID_AIRPORTS = list(airport_holiday_map.keys())
 
+# Models directory (persist models across restarts). Can be overridden with MODELS_DIR env var.
+MODELS_DIR = os.environ.get("MODELS_DIR", "models")
+os.makedirs(MODELS_DIR, exist_ok=True)
+
 # ------------------------------------------------------------------------------
 # A Fallback Regressor that Always Returns 5
 # ------------------------------------------------------------------------------
@@ -380,7 +384,7 @@ def train_models():
         logger.warning("No data returned. Saving fallback models for all airports.")
         for ap in VALID_AIRPORTS:
             fallback = FallbackRegressor(constant=5)
-            joblib.dump(fallback, f'trained_model_{ap}.joblib')
+            joblib.dump(fallback, os.path.join(MODELS_DIR, f'trained_model_{ap}.joblib'))
         return
 
     df.sort_index(inplace=True)
@@ -390,14 +394,14 @@ def train_models():
         if airport_code not in df.columns:
             logger.warning(f"No column for {airport_code}. Saving fallback model.")
             fallback = FallbackRegressor()
-            joblib.dump(fallback, f'trained_model_{airport_code}.joblib')
+            joblib.dump(fallback, os.path.join(MODELS_DIR, f'trained_model_{airport_code}.joblib'))
             continue
 
         airport_df = df[df[airport_code] == 1]
         if airport_df.empty:
             logger.warning(f"No data for airport {airport_code}, saving fallback.")
             fallback = FallbackRegressor()
-            joblib.dump(fallback, f'trained_model_{airport_code}.joblib')
+            joblib.dump(fallback, os.path.join(MODELS_DIR, f'trained_model_{airport_code}.joblib'))
             continue
 
         # Ensure rolling columns exist
@@ -414,7 +418,7 @@ def train_models():
         if len(train_df) < 10:
             logger.warning(f"Not enough training rows for {airport_code}, using fallback.")
             fallback = FallbackRegressor()
-            joblib.dump(fallback, f'trained_model_{airport_code}.joblib')
+            joblib.dump(fallback, os.path.join(MODELS_DIR, f'trained_model_{airport_code}.joblib'))
             continue
 
             try:
@@ -460,12 +464,12 @@ def train_models():
                     mae = mean_absolute_error(y_test, y_pred)
                     logger.info(f"{airport_code} - MAE: {mae:.2f} RMSE: {rmse:.2f} MSE: {mse:.2f}")
 
-                joblib.dump(model, f'trained_model_{airport_code}.joblib')
+                joblib.dump(model, os.path.join(MODELS_DIR, f'trained_model_{airport_code}.joblib'))
                 logger.info(f"Model for {airport_code} saved.")
             except Exception as e:
                 logger.error(f"Error training {airport_code}, using fallback. Error: {e}")
                 fallback = FallbackRegressor()
-                joblib.dump(fallback, f'trained_model_{airport_code}.joblib')
+                joblib.dump(fallback, os.path.join(MODELS_DIR, f'trained_model_{airport_code}.joblib'))
 
     logger.info("Finished training in %.2f seconds", time.time() - start_time)
 
@@ -476,7 +480,7 @@ def load_model_for_airport(airport_code: str):
     Models should be produced by an external trainer and persisted to storage.
     """
     try:
-        model = joblib.load(f"trained_model_{airport_code}.joblib")
+        model = joblib.load(os.path.join(MODELS_DIR, f"trained_model_{airport_code}.joblib"))
         logger.info(f"Loaded model for {airport_code}.")
         return model
     except Exception as e:
@@ -633,11 +637,25 @@ def make_prediction():
     return jsonify(response)
 
 # ------------------------------------------------------------------------------
-# Crontab Job for Retraining (always enabled)
+# Crontab Job for Retraining (always enabled) + startup model ensure
 # ------------------------------------------------------------------------------
-# The application will always register a daily retrain job using flask-crontab.
-# If you don't want in-app scheduling, run the process without long-running container
-# or remove/disable this section externally.
+def ensure_models_on_startup():
+    """
+    Ensure models exist on disk. If any are missing, perform initial training.
+    This guarantees the first requests after a fresh deploy won't hit fallbacks.
+    """
+    missing = []
+    for ap in VALID_AIRPORTS:
+        path = os.path.join(MODELS_DIR, f"trained_model_{ap}.joblib")
+        if not os.path.exists(path):
+            missing.append(ap)
+
+    if missing:
+        logger.info(f"Models missing for {len(missing)} airports: {','.join(missing)}. Running initial training.")
+        train_models()
+    else:
+        logger.info("All models present on startup.")
+
 crontab = Crontab(app)
 
 @crontab.job(minute=0, hour=0)
@@ -653,7 +671,8 @@ def scheduled_training():
 # ------------------------------------------------------------------------------
 with app.app_context():
     logger.info("Initializing application...")
-    # Training on startup is disabled. Models should be prepared by a separate trainer process and available on disk or object storage.
+    # Ensure models exist on startup (creates them if missing)
+    ensure_models_on_startup()
 
 # ------------------------------------------------------------------------------
 # Main

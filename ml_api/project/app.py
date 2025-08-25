@@ -450,12 +450,47 @@ def train_models():
                 reg_lambda=1.0,
                 random_state=7,
             )
-            model.fit(
-                X_train, y_train,
-                eval_set=[(X_test, y_test)],
-                early_stopping_rounds=50,
-                verbose=False
-            )
+            # Ensure eval metric is set for consistent reporting
+            model.set_params(eval_metric='rmse')
+
+            # Try multiple fit signatures to support different xgboost versions:
+            # 1) fit(..., early_stopping_rounds=...)
+            # 2) fit(..., callbacks=[EarlyStopping(...)] )
+            # 3) fallback: fit(...) without early stopping
+            fitted = False
+            try:
+                model.fit(
+                    X_train, y_train,
+                    eval_set=[(X_test, y_test)],
+                    early_stopping_rounds=50,
+                    verbose=False
+                )
+                fitted = True
+            except TypeError as te:
+                # Some xgboost versions do not accept early_stopping_rounds kwarg
+                logger.debug(f"early_stopping_rounds not supported: {te}")
+                try:
+                    from xgboost.callback import EarlyStopping
+                    callbacks = [EarlyStopping(rounds=50, metric_name='rmse', data_name='validation_0')]
+                    model.fit(
+                        X_train, y_train,
+                        eval_set=[(X_test, y_test)],
+                        callbacks=callbacks,
+                        verbose=False
+                    )
+                    fitted = True
+                except Exception as e:
+                    logger.warning(f"Callback-based early stopping failed: {e}. Falling back to fit without early stopping.")
+            except Exception as e:
+                logger.warning(f"fit with early_stopping_rounds failed: {e}. Trying fallback methods.")
+
+            if not fitted:
+                # Final fallback: no early stopping
+                model.fit(
+                    X_train, y_train,
+                    eval_set=[(X_test, y_test)],
+                    verbose=False
+                )
 
             if not X_test.empty:
                 y_pred = model.predict(X_test)

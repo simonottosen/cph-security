@@ -12,7 +12,22 @@ import gzip
 import io
 import http.client
 
+
 from typing import Optional
+
+# ---------------------------------------------------------------------------
+#                    Supabase (server-to-server) client
+# ---------------------------------------------------------------------------
+# Use the service role key for backend jobs. This bypasses RLS and
+# avoids any need to call sign_in/sign_out on each run.
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+# Prefer an explicit service-role env var; fall back to SUPABASE_KEY if you already
+# store the service key there.
+SUPABASE_SERVICE_ROLE_KEY = (
+    os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_KEY")
+)
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 
 # This function performs a healthcheck.
@@ -113,24 +128,19 @@ def process_airport_result(
         f"Queue is {queue} at {timestamp}"
     )
 
-def supabase_write(queue, timestamp, airport):
-    url: str = os.environ.get("SUPABASE_URL")
-    key: str = os.environ.get("SUPABASE_KEY")
-    email: str = os.environ.get("SUPABASE_EMAIL")
-    password: str = os.environ.get("SUPABASE_PASSWORD")
 
-    supabase: Client = create_client(url, key)
-    data = supabase.auth.sign_in_with_password({"email": email, "password": password})
-    
+def supabase_write(queue, timestamp, airport):
     try:
-        data, count = supabase.table('waitingtime') \
-            .insert({"queue": queue, "timestamp": timestamp, "airport": airport}) \
+        # Direct server-to-server write using the service role client
+        _, _ = (
+            supabase
+            .table('waitingtime')
+            .insert({"queue": queue, "timestamp": timestamp, "airport": airport})
             .execute()
+        )
         supabase_write_status = "Supabase write completed"
-        supabase.auth.sign_out()
     except Exception as e:
         supabase_write_status = f"Supabase write failed with error: {e}"
-    
     return supabase_write_status
 
     

@@ -16,6 +16,10 @@ from unittest.mock import patch, MagicMock
 # Ensure the project directory (where app.py lives) is on sys.path
 sys.path.append(str(Path(__file__).resolve().parent))
 
+# Provide dummy Supabase env so app's module-level Supabase client can initialize
+os.environ.setdefault("SUPABASE_URL", "https://unit-test.supabase.co")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "service-role-unit-test")
+
 from app import healthcheck_perform, database_write
 
 

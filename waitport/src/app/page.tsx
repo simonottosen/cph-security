@@ -17,7 +17,7 @@ type AirportCode =
   | 'arn'
   | 'dus'
   | 'fra'
-  //| 'muc'
+  | 'muc'
   | 'lhr'
   | 'ams'
   | 'dub'
@@ -30,7 +30,7 @@ const airportNames: Record<AirportCode, string> = {
   arn: '🇸🇪 Stockholm Airport',
   dus: '🇩🇪 Düsseldorf Airport',
   fra: '🇩🇪 Frankfurt Airport',
-  //muc: '🇩🇪 Munich Airport',
+  muc: '🇩🇪 Munich Airport',
   lhr: '🇬🇧 London Heathrow Airport',
   ams: '🇳🇱 Amsterdam Airport',
   dub: '🇮🇪 Dublin Airport',

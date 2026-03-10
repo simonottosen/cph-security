@@ -4,6 +4,7 @@ import multiprocessing as mp
 import os
 import platform
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import numpy as np
 import pandas as pd
@@ -482,23 +483,26 @@ def retrain():
     response.raise_for_status()
     df_raw = pd.DataFrame(response.json())
 
-    for code in VALID_AIRPORTS:
-        try:
-            code, pred_records, metrics = _train_airport(code, df_raw)
-            df_preds[code] = pred_records
-            train_metrics[code] = metrics
-        except Exception as e:
-            logger.exception("Error forecasting airport %s: %s", code, e)
-            df_preds[code] = _single_line_message(code, f"Forecast failed: {e}")
-            train_metrics[code] = {
-                "model": CHRONOS2_MODEL_ID,
-                "device_map": CHRONOS2_DEVICE_MAP,
-                "prediction_length": PREDICTION_LENGTH,
-                "total_time_seconds": 0.0,
-                "last_trained": datetime.datetime.now().isoformat(),
-                "status": "error",
-                "status_message": str(e),
-            }
+    with ProcessPoolExecutor(max_workers=min(len(VALID_AIRPORTS), os.cpu_count() or 1)) as executor:
+        futures = {executor.submit(_train_airport, code, df_raw): code for code in VALID_AIRPORTS}
+        for future in as_completed(futures):
+            code = futures[future]
+            try:
+                code, pred_records, metrics = future.result()
+                df_preds[code] = pred_records
+                train_metrics[code] = metrics
+            except Exception as e:
+                logger.exception("Error forecasting airport %s: %s", code, e)
+                df_preds[code] = _single_line_message(code, f"Forecast failed: {e}")
+                train_metrics[code] = {
+                    "model": CHRONOS2_MODEL_ID,
+                    "device_map": CHRONOS2_DEVICE_MAP,
+                    "prediction_length": PREDICTION_LENGTH,
+                    "total_time_seconds": 0.0,
+                    "last_trained": datetime.datetime.now().isoformat(),
+                    "status": "error",
+                    "status_message": str(e),
+                }
 
 
 @app.route('/forecast/<airport>', methods=['GET'])

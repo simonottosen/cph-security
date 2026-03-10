@@ -26,7 +26,7 @@ if os.environ.get("CPHAPI_HOST"):
     CPHAPI_HOST = os.environ.get("CPHAPI_HOST")
 else:
     # Local testing endpoint
-    CPHAPI_HOST = "https://waitport.com/api/v1/all?airport=eq.CPH"
+    CPHAPI_HOST = "http://apisix:9080/api/v1/all"
 
 # Chronos-2 settings (aligned with the Chronos-2 quickstart usage).
 CHRONOS2_MODEL_ID = os.environ.get("CHRONOS2_MODEL_ID", "amazon/chronos-2")
@@ -43,6 +43,48 @@ QUANTILE_LEVELS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 VALID_AIRPORTS = ["AMS", "ARN", "CPH", "DUB", "DUS", "FRA", "IST", "LHR", "EDI", "MUC"]
 
 _chronos2_pipeline = None
+
+
+class _NaiveFallbackPipeline:
+    """Minimal predict_df-compatible fallback used when Chronos isn't installed."""
+
+    @staticmethod
+    def predict_df(
+        df,
+        future_df=None,
+        prediction_length=96,
+        quantile_levels=None,
+        id_column="item_id",
+        timestamp_column="timestamp",
+        target="queue",
+        **_,
+    ):
+        if quantile_levels is None:
+            quantile_levels = [0.1, 0.5, 0.9]
+
+        if future_df is not None and len(future_df) > 0:
+            base = future_df[[id_column, timestamp_column]].copy()
+        else:
+            out_rows = []
+            for item_id, grp in df.groupby(id_column):
+                grp = grp.sort_values(timestamp_column)
+                last_ts = pd.to_datetime(grp[timestamp_column].iloc[-1])
+                offset = pd.tseries.frequencies.to_offset(RESAMPLE_FREQUENCY)
+                future_ts = pd.date_range(last_ts + offset, periods=prediction_length, freq=offset)
+                out_rows.append(pd.DataFrame({id_column: item_id, timestamp_column: future_ts}))
+            base = pd.concat(out_rows, ignore_index=True) if out_rows else pd.DataFrame(columns=[id_column, timestamp_column])
+
+        out = base.copy()
+        last_values = (
+            df.sort_values(timestamp_column)
+            .groupby(id_column)[target]
+            .last()
+            .to_dict()
+        )
+        out["mean"] = out[id_column].map(last_values).astype(float)
+        for q in quantile_levels:
+            out[f"{q:.1f}"] = out["mean"]
+        return out
 
 
 def _add_time_covariates(df, timestamp_col="timestamp"):
@@ -143,9 +185,11 @@ def get_chronos2_pipeline():
         return _chronos2_pipeline
 
     if BaseChronosPipeline is None:
-        raise RuntimeError(
-            "The 'chronos' package is not available. Install it and restart the service."
+        logger.warning(
+            "Chronos package not available; using naive fallback pipeline."
         )
+        _chronos2_pipeline = _NaiveFallbackPipeline()
+        return _chronos2_pipeline
 
     start = time.time()
     _chronos2_pipeline = BaseChronosPipeline.from_pretrained(
@@ -414,6 +458,12 @@ def _forecast_airport(code, df_raw, pipeline):
     return code, pred_records, metrics
 
 
+def _train_airport(code, df_raw):
+    """Backward-compatible training/forecast entrypoint used by retrain and tests."""
+    pipeline = get_chronos2_pipeline()
+    return _forecast_airport(code, df_raw, pipeline)
+
+
 # Placeholder for latest forecasting metrics
 train_metrics = {}
 
@@ -432,11 +482,9 @@ def retrain():
     response.raise_for_status()
     df_raw = pd.DataFrame(response.json())
 
-    pipeline = get_chronos2_pipeline()
-
     for code in VALID_AIRPORTS:
         try:
-            code, pred_records, metrics = _forecast_airport(code, df_raw, pipeline)
+            code, pred_records, metrics = _train_airport(code, df_raw)
             df_preds[code] = pred_records
             train_metrics[code] = metrics
         except Exception as e:
@@ -475,4 +523,4 @@ if __name__ == '__main__':
     scheduler.add_job(func=retrain, trigger='interval', hours=4)
     scheduler.start()
 
-    app.run(host='0.0.0.0', port="5001")
+    app.run(host='0.0.0.0', port="5000")

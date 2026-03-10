@@ -1,27 +1,18 @@
-# Pull base image
-FROM python:3.12
+# syntax=docker/dockerfile:1.7
 
-# Use the recommended "key=value" format for ENV
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
+FROM python:3.12-slim
 
-# Set the working directory
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
 WORKDIR /project
 
-# Install pipenv
-RUN pip install --no-cache-dir pipenv
+COPY requirements.txt /project/requirements.txt
 
-# Copy your Pipfile
-COPY Pipfile /project/
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir -r /project/requirements.txt
 
-# Lock dependencies (this creates/updates Pipfile.lock in /project)
-RUN pipenv lock
-
-# Install dependencies into the system (includes dev packages)
-RUN pipenv install --system --dev
-
-# Copy your application code
 COPY project/app.py /project/app.py
 
-# Set your default command
 CMD ["python", "/project/app.py", "-h", "0.0.0.0"]

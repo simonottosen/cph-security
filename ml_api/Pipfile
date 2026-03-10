@@ -6,7 +6,6 @@ name = "pypi"
 [packages]
 flask = "==3.1.2"
 pandas = "==2.3.2"
-lightgbm = "==4.6.0"
 holidays = "==0.79"
 flask-caching = "==2.3.1"
 flask_crontab = "==0.1.2"

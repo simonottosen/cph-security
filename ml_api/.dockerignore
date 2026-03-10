@@ -1,0 +1,7 @@
+**
+!Dockerfile
+!.dockerignore
+!requirements.txt
+!project/
+project/*
+!project/app.py

@@ -9,17 +9,14 @@ python_version = "3.12"
 [packages]
 pandas = "*"
 numpy = "*"
-scikit-learn = "*"
-python-dateutil = "*"
-holidays = "*"
 flask = "*"
 apscheduler = "*"
-autogluon = {version = "==1.5.0", extras = ["timeseries"]}
 python-dotenv = "*"
-pytest = "*"
-
+chronos-forecasting = "*"
+torch = "*"
 
 [dev-packages]
+pytest = "*"
 
 [scripts]
 start = "python project/app.py"

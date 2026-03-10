@@ -1,4 +1,5 @@
 import datetime
+import importlib
 import logging
 import multiprocessing as mp
 import os
@@ -13,10 +14,12 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
 from flask import Flask, jsonify
 
+_chronos_import_error = None
 try:
     from chronos import BaseChronosPipeline
-except Exception:  # pragma: no cover - runtime dependency availability check
+except Exception as exc:  # pragma: no cover - runtime dependency availability check
     BaseChronosPipeline = None
+    _chronos_import_error = exc
 
 load_dotenv()
 
@@ -29,12 +32,32 @@ else:
     # Local testing endpoint
     CPHAPI_HOST = "http://apisix:9080/api/v1/all"
 
+
+def _detect_default_device_map():
+    """Pick a safe default device without requiring a GPU-enabled runtime."""
+    if platform.system() == "Darwin":
+        return "cpu"
+
+    try:
+        torch = importlib.import_module("torch")
+    except Exception as exc:  # pragma: no cover - depends on runtime image
+        logger.warning("Unable to import torch while selecting device map: %s", exc)
+        return "cpu"
+
+    try:
+        if torch.cuda.is_available():
+            return "cuda"
+    except Exception as exc:  # pragma: no cover - depends on runtime image
+        logger.warning("Unable to query torch.cuda availability: %s", exc)
+
+    return "cpu"
+
+
 # Chronos-2 settings (aligned with the Chronos-2 quickstart usage).
 CHRONOS2_MODEL_ID = os.environ.get("CHRONOS2_MODEL_ID", "amazon/chronos-2")
-# Apple Silicon default: CPU (safe baseline). You can override with CHRONOS2_DEVICE_MAP=mps if supported.
 CHRONOS2_DEVICE_MAP = os.environ.get("CHRONOS2_DEVICE_MAP")
 if CHRONOS2_DEVICE_MAP is None:
-    CHRONOS2_DEVICE_MAP = "cpu" if platform.system() == "Darwin" else "cuda"
+    CHRONOS2_DEVICE_MAP = _detect_default_device_map()
 PREDICTION_LENGTH = int(os.environ.get("PREDICTION_LENGTH", "96"))
 RESAMPLE_FREQUENCY = os.environ.get("RESAMPLE_FREQUENCY", "5min")
 CONTEXT_DAYS = int(os.environ.get("CONTEXT_DAYS", "60"))
@@ -187,7 +210,8 @@ def get_chronos2_pipeline():
 
     if BaseChronosPipeline is None:
         logger.warning(
-            "Chronos package not available; using naive fallback pipeline."
+            "Chronos import failed; using naive fallback pipeline. error=%s",
+            _chronos_import_error,
         )
         _chronos2_pipeline = _NaiveFallbackPipeline()
         return _chronos2_pipeline

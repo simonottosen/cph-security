@@ -1,109 +1,264 @@
+# Waitport - Airport Security Queue Predictions
 
-
-# Airport Security Queue
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/simonottosen/cph-security/blob/main/LICENSE)
 [![CodeFactor](https://www.codefactor.io/repository/github/simonottosen/cph-security/badge)](https://www.codefactor.io/repository/github/simonottosen/cph-security)
 
-This tool is designed to provide estimates of the security queue in the CPH airport at a user-defined point in time in the future. The tool uses Machine Learning based on historical data to estimate the queue.
+Waitport monitors real-time security queue wait times and provides ML-based predictions for 11 European airports. Queue data is collected every 5 minutes, stored in PostgreSQL (and mirrored to Supabase), and used to train per-airport XGBoost models that predict future queue lengths.
 
-Once the system is running you can access the frontend on [http://localhost:8501](http://localhost:8501)
+### Supported Airports
 
-### To-Do
-Implement data on amount of flights in the airport and understand correlation
+| Code | City | Country |
+|------|------|---------|
+| CPH | Copenhagen | Denmark |
+| FRA | Frankfurt | Germany |
+| ARN | Stockholm Arlanda | Sweden |
+| OSL | Oslo | Norway |
+| DUS | Dusseldorf | Germany |
+| AMS | Amsterdam Schiphol | Netherlands |
+| DUB | Dublin | Ireland |
+| LHR | London Heathrow | United Kingdom |
+| MUC | Munich | Germany |
+| EDI | Edinburgh | United Kingdom |
+| IST | Istanbul | Turkey |
+
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph External
+        User["User Browser"]
+        AirportAPIs["Airport APIs\n(11 airports)"]
+    end
+
+    subgraph Docker Compose
+        subgraph Ingress
+            Nginx["Nginx\nReverse Proxy\n:80"]
+        end
+
+        subgraph Frontend
+            NextJS["Next.js 16\nReact 19 / Tailwind / i18n\n:3000"]
+            Legacy["Legacy React\n(backup)\n:3000"]
+        end
+
+        subgraph API Gateway
+            APISIX["Apache APISIX\n:9080"]
+            APISIXDash["APISIX Dashboard\n:9000"]
+            etcd["etcd\n:2379"]
+        end
+
+        subgraph Data Layer
+            Postgres["PostgreSQL 17\n:5432"]
+            PostgREST["PostgREST\n:3000"]
+            Swagger["Swagger UI"]
+        end
+
+        subgraph Machine Learning
+            MLAPI["Flask ML API\nXGBoost\n:5000"]
+            AutoGluon["AutoGluon\nChronos-2"]
+        end
+
+        subgraph Data Ingestion
+            Ofelia["Ofelia\nScheduler"]
+            Fetchtime["Fetchtime\nPython 3.12"]
+        end
+    end
+
+    subgraph Cloud
+        Supabase["Supabase"]
+    end
+
+    User -->|"http://localhost"| Nginx
+    Nginx -->|"/"| NextJS
+    NextJS -.->|"failover"| Legacy
+    Nginx -->|"/api/"| APISIX
+
+    APISIX --> PostgREST
+    APISIX --> MLAPI
+    APISIXDash --> APISIX
+    etcd <-->|"config"| APISIX
+
+    PostgREST --> Postgres
+    Swagger --> PostgREST
+
+    Ofelia -->|"@every 5m\nper airport"| Fetchtime
+    AirportAPIs -->|"queue data"| Fetchtime
+    Fetchtime -->|"write"| Postgres
+    Fetchtime -->|"write"| Supabase
+
+    MLAPI -->|"read"| Supabase
 ```
-https://www.cph.dk/api/FlightInformation/GetFlightInfoTable?direction=D&userQuery=*:*&startDateTime=2023-05-17T00:00:00.000Z&endDateTime=2023-05-17T23:59:00.000Z&language=da
+
+## Tech Stack
+
+| Layer | Technologies |
+|-------|-------------|
+| **Frontend** | Next.js 16, React 19, TypeScript, Tailwind CSS 4, Recharts 3, Headless UI, i18n (en/da/de) |
+| **Backend** | Python 3.12, Flask, PostgREST |
+| **ML** | XGBoost 3.0, scikit-learn 1.7, AutoGluon, Chronos-2, holidays |
+| **Database** | PostgreSQL 17, Supabase (cloud mirror) |
+| **API Gateway** | Apache APISIX, etcd |
+| **Infrastructure** | Docker Compose (13 services), Nginx, Ofelia scheduler, GitHub Actions CI/CD, GHCR |
+
+## Getting Started
+
+### Prerequisites
+
+- Docker and Docker Compose
+- A Google Firebase service account key (`keyfile.json`) for the data fetching service
+- Supabase project URL and service role key (for ML API training data)
+
+### Environment Setup
+
+The `.env` file in the repository root contains all required configuration. Key variables:
+
+| Variable | Description |
+|----------|-------------|
+| `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_USER` | PostgreSQL credentials |
+| `GCP_KEY_PATH` | Path to your Firebase `keyfile.json` |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Supabase connection details |
+| `CPHAPI_HOST` | Internal PostgREST endpoint |
+| `*_HEALTHCHECK` | Healthcheck ping URLs per airport (CPH, FRA, ARN, etc.) |
+
+### Deployment
+
+```bash
+docker compose up -d
 ```
 
-# Server configuration
+Once running, access the frontend at [http://localhost](http://localhost) (port 80 via Nginx).
 
-The below guide will set up the server on your local environment with minimal configuration.
+## Services
 
-## Configuration of the server
+| Service | Image | Purpose | Exposed Port |
+|---------|-------|---------|-------------|
+| `cph_postgres_db` | `postgres:17` | Primary database | - |
+| `cph_frontend_nextjs` | `ghcr.io/.../cph-security_nextjs:main` | Next.js frontend (primary) | - |
+| `cph_frontend_nextgen` | `ghcr.io/.../cph-security_frontend-nextgen:main` | Legacy React frontend (backup) | - |
+| `reverse-proxy` | `nginx:alpine` | Reverse proxy and load balancer | **80** |
+| `cph_postgrest` | `postgrest/postgrest` | Auto-generated REST API from PostgreSQL | - |
+| `swagger-ui` | `swaggerapi/swagger-ui` | Interactive API documentation | - |
+| `universal_fetchtime` | `ghcr.io/.../cph-security_fetchtime:main` | Scheduled data collection from airport APIs | - |
+| `ofelia_scheduler` | `mcuadros/ofelia` | Cron-like scheduler for fetchtime jobs | - |
+| `apisix` | `apache/apisix` | API gateway | **9080** |
+| `apisix_dashboard` | `apache/apisix-dashboard` | APISIX management UI | **9000** |
+| `etcd` | `bitnamilegacy/etcd` | APISIX configuration store | 2379 |
+| `ml_api` | `ghcr.io/.../cph-security_ml_api:main` | XGBoost prediction API | **5000** |
+| `autogluon` | `ghcr.io/.../cph-security_autogluon:latest` | Chronos-2 time-series forecasting | - |
 
-Before the server will be able to run, you will need to set up Google Firebase and the relevant environment variables. If you do not wish to run with Google Firebase, delete the relevant code in /backend/app/fetch.py
+## Ofelia Scheduler
 
-### Set up environment
+[Ofelia](https://github.com/mcuadros/ofelia) orchestrates the data collection jobs, running a fetch command for each airport every 5 minutes:
 
-The .env file present in the repository will be able to work OOTB. It is recommended to set up a reverse proxy such as Traefik or similar and edit the environment variable accordingly. 
-
-You will need to save your Firebase key as keyfile.json in the root folder of the project or edit the environment variable $GCP_KEY_PATH. 
-[Firebase getting started](https://cloud.google.com/firestore/docs/client/get-firebase)
-[Setting up Firebase API key](https://firebase.google.com/docs/projects/api-keys)
-
-## Deployment
-
-Following the configuration of the environment variables and setting up Firebase, the server can be run with docker-compose. 
-```
-$ source .env
-$ docker-compose up -d
-```
-
-## Ofelia scheduler configuration
-
-Ofelia is utilized for orchestrating the fetchtime container and avoid using Cron through Docker, which can often be a challenging task when using environment variables. To change the time between each fetch of data, adjust the docker-compose file. 
-Documentation for Ofelia can be found here [mcuadros/ofelia](https://github.com/mcuadros/ofelia).
-
-```
+```yaml
 labels:
-    ofelia.enabled: "true"
-    ofelia.job-exec.app.schedule: "@every 1m"
-    ofelia.job-exec.app.command: "fetch"
+  ofelia.enabled: "true"
+  ofelia.job-exec.cph.schedule: "@every 5m"
+  ofelia.job-exec.cph.command: "cph-fetch"
+  ofelia.job-exec.fra.schedule: "@every 5m"
+  ofelia.job-exec.fra.command: "fra-fetch"
+  # ... repeated for all 11 airports
 ```
 
+## API Usage
 
-## Usage of the API
+The API is powered by [PostgREST](https://postgrest.org), which generates a RESTful API directly from the PostgreSQL schema. Requests are routed through Nginx and APISIX.
 
-The API is driven by [PostgREST/postgrest](https://github.com/PostgREST/postgrest). PostgREST serves a fully RESTful API from any existing PostgreSQL database. It provides a cleaner, more standards-compliant, faster API than you are likely to write from scratch.
-
-Latest documentation is at [postgrest.org](http://postgrest.org). You can contribute to the docs in [PostgREST/postgrest-docs](https://github.com/PostgREST/postgrest-docs).
-
-
-
-Get all
+**Get all waiting times:**
 ```
-http://localhost:3000/waitingtime
+GET /api/v1/waitingtime
 ```
 
-Get all times with a waiting time less that 4 minutes
+**Get times with queue less than 4 minutes:**
 ```
-http://localhost:3000/waitingtime?queue=lt.4
-```
-
-Select only a subset of the data
-```
-http://localhost:3000/waitingtime?select=queue,timestamp
+GET /api/v1/waitingtime?queue=lt.4
 ```
 
-
-Get the current waiting time
+**Get only queue and timestamp columns:**
 ```
-http://localhost:3000/waitingtime?select=queue&order=id.desc&limit=1
+GET /api/v1/waitingtime?select=queue,timestamp
 ```
 
+**Get the latest waiting time:**
+```
+GET /api/v1/waitingtime?select=queue&order=id.desc&limit=1
+```
 
-## API-documentation
+### ML Prediction Endpoint
 
-PostgREST uses the [OpenAPI](https://openapis.org/) standard to generate up-to-date documentation for APIs. This is being consumed by Swagger. It is available on localhost:8080 after you have run the project. 
+The ML API provides queue length predictions:
 
-[Swagger UI](https://swagger.io/tools/swagger-ui/) allows us to visualize and interact with the API’s resources without having any of the implementation logic in place. It’s automatically generated from the OpenAPI Specification, with the visual documentation making it easy for back end implementation and client side consumption.
+```
+GET /predict?airport=CPH&timestamp=2026-03-14T08:00
+```
 
-##  Frontend
+**Parameters:**
+- `airport` - Airport code (one of: AMS, ARN, CPH, DUB, DUS, FRA, IST, LHR, EDI, MUC)
+- `timestamp` - Future datetime in UTC (format: `YYYY-MM-DDTHH:MM`)
 
-This code is the frontend part of the Waitport service, a web application that allows users to track waiting times at various European airports. The frontend is built using React and includes features such as selecting an airport to view current queue times and selecting a specific date and time to see predicted queue lengths.
+**Response:**
+```json
+{"predicted_queue_length_minutes": 12.5}
+```
 
-### Dependencies
-- React
-- axios
-- react-datetime
-- react-bootstrap
+## API Documentation
 
-### How to Use
-1. Clone the repository to your local machine.
-2. Install dependencies by running `npm install`.
-3. Start the development server by running `npm start`.
-4. Open the web application in your browser at `http://localhost:3000/`.
+PostgREST uses the [OpenAPI](https://openapis.org/) standard to generate API documentation, consumed by Swagger UI. The Swagger UI container provides an interactive interface to explore and test the API endpoints.
 
-#### Features
-- Select an airport from the dropdown menu to view current queue times and average queue times for the past two hours.
-- Select a specific date and time to view predicted queue lengths for the selected airport.
-- API endpoint available at `https://waitport.com/api/v1/:airport` where `:airport` is the airport code (e.g. `cph` for Copenhagen Airport). 
+## ML Predictions
+
+The system uses two ML approaches:
+
+**XGBoost (primary)** - Per-airport gradient-boosted models trained on historical queue data. Features include:
+- Time-of-day, day-of-week, month
+- Local public holidays (per country)
+- Rolling averages and lag features
+- Models retrain daily at midnight via Flask-Crontab
+
+**AutoGluon / Chronos-2** - Time-series forecasting using Amazon's Chronos-2 foundation model for complementary predictions.
+
+Both services read training data from Supabase and serve predictions via REST endpoints.
+
+## Internationalization (i18n)
+
+The frontend supports three languages:
+- English (`en`)
+- Danish (`da`)
+- German (`de`)
+
+Locale files are located in `waitport/src/locales/` and the app automatically detects the user's preferred language from browser settings and URL path segments.
+
+## CI/CD
+
+Five GitHub Actions workflows automate builds and security scanning:
+
+| Workflow | Trigger | Action |
+|----------|---------|--------|
+| `frontend_nextjs.yml` | Changes to `waitport/` | Build and push Next.js image to GHCR |
+| `fetchtime.yml` | Changes to `fetchtime/` | Run tests, build and push image to GHCR |
+| `ml_api.yml` | Changes to `ml_api/` | Build and push ML API image to GHCR |
+| `autogluon.yml` | Changes to `autogluon/` | Build and push AutoGluon image to GHCR |
+| `codeql.yml` | Scheduled / on push | Code security analysis |
+
+All production images are hosted on GitHub Container Registry (`ghcr.io/simonottosen/cph-security_*`).
+
+## Project Structure
+
+```
+cph-security/
+├── waitport/              # Next.js frontend (React 19, Tailwind, i18n)
+├── fetchtime/             # Data collection service (Python 3.12)
+├── ml_api/                # XGBoost prediction API (Flask)
+├── autogluon/             # Chronos-2 forecasting service
+├── nextflight/            # Flight data service
+├── database/              # PostgreSQL schema (create_tables.sql)
+├── config/
+│   ├── reverse_proxy/     # Nginx configuration
+│   ├── apisix_conf/       # APISIX gateway configuration
+│   └── apisix_dashboard_conf/
+├── .github/workflows/     # CI/CD pipelines
+└── docker-compose.yml     # Service orchestration (13 services)
+```
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'fetchtime/**'
+      - '.github/workflows/fetchtime.yml'
 
 env:
   REGISTRY: ghcr.io

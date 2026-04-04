@@ -3,6 +3,7 @@ import requests
 import json
 from datetime import datetime
 import os
+import time
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
@@ -12,8 +13,54 @@ import gzip
 import io
 import http.client
 
-
 from typing import Optional
+from prometheus_client import Counter, Histogram, Gauge
+
+# ---------------------------------------------------------------------------
+#                    Prometheus metrics
+# ---------------------------------------------------------------------------
+_PULL_TOTAL = Counter(
+    "airport_pull_total",
+    "Total number of airport data pulls",
+    ["airport", "status"],  # status: 'success' or 'failure'
+)
+_PULL_DURATION = Histogram(
+    "airport_pull_duration_seconds",
+    "Duration of airport data pulls in seconds",
+    ["airport"],
+    buckets=[0.5, 1, 2, 5, 10, 30, 60],
+)
+_QUEUE_MINUTES = Gauge(
+    "airport_queue_minutes",
+    "Current security queue wait time in minutes",
+    ["airport"],
+    multiprocess_mode="mostrecent",
+)
+_LAST_PULL_TIMESTAMP = Gauge(
+    "airport_last_pull_timestamp_seconds",
+    "Unix timestamp of the last successful data pull",
+    ["airport"],
+    multiprocess_mode="mostrecent",
+)
+
+
+def _track(airport_code: str):
+    """Decorator that records pull duration and success/failure for an airport."""
+    def decorator(fn):
+        def wrapper(*args, **kwargs):
+            start = time.time()
+            try:
+                result = fn(*args, **kwargs)
+                _PULL_TOTAL.labels(airport=airport_code, status="success").inc()
+                return result
+            except Exception:
+                _PULL_TOTAL.labels(airport=airport_code, status="failure").inc()
+                raise
+            finally:
+                _PULL_DURATION.labels(airport=airport_code).observe(time.time() - start)
+        wrapper.__name__ = fn.__name__
+        return wrapper
+    return decorator
 
 # ---------------------------------------------------------------------------
 #                    Supabase (server-to-server) client
@@ -121,6 +168,9 @@ def process_airport_result(
     supabase_status = supabase_write(queue, timestamp, airport)
     healthcheck_status = healthcheck_perform(healthcheck_id)
 
+    _QUEUE_MINUTES.labels(airport=airport).set(queue)
+    _LAST_PULL_TIMESTAMP.labels(airport=airport).set(time.time())
+
     print(
         f"Airport {airport} was completed with the following status. "
         f"Database: {database_status}. Firebase: {firebase_status}. "
@@ -179,6 +229,7 @@ def firebase_write(airport):
     
     return firebase_write_status
 
+@_track("MUC")
 def munich():
     healthcheck = os.environ.get("MUC_HEALTHCHECK") 
     airport = "MUC"
@@ -224,6 +275,7 @@ def munich():
 
 
 
+@_track("IST")
 def istanbul():
     healthcheck = os.environ.get("IST_HEALTHCHECK") 
     airport = "IST"
@@ -244,6 +296,7 @@ def istanbul():
     process_airport_result(queue, airport, healthcheck)
 
 
+@_track("LHR")
 def heathrow():
     healthcheck = os.environ.get("LHR_HEALTHCHECK") 
     airport = "LHR"
@@ -274,6 +327,7 @@ def heathrow():
     process_airport_result(queue, airport, healthcheck)
 
 # This function retrieves the waiting time at Frankfurt airport
+@_track("FRA")
 def frankfurt():
     # Define initial values
     healthcheck = os.environ.get("FRA_HEALTHCHECK") 
@@ -302,6 +356,7 @@ def frankfurt():
     process_airport_result(queue, airport, healthcheck)
 
 # This function retrieves the waiting time at Dusseldorf airport
+@_track("DUS")
 def dusseldorf():
     # Define initial values
     healthcheck = os.environ.get("DUS_HEALTHCHECK") 
@@ -329,6 +384,7 @@ def dusseldorf():
         process_airport_result(queue, airport, healthcheck)
 
 # This function retrieves the waiting time at Copenhagen airport
+@_track("CPH")
 def copenhagen():
     healthcheck = os.environ.get("CPH_HEALTHCHECK")
     airport = "CPH"
@@ -368,6 +424,7 @@ def copenhagen():
     process_airport_result(queue, airport, healthcheck, timestamp)
     
 # This function retrieves the waiting time at Arlanda airport
+@_track("ARN")
 def arlanda():
     # Define initial values
     healthcheck = os.environ.get("ARN_HEALTHCHECK") 
@@ -392,6 +449,7 @@ def arlanda():
     process_airport_result(queue, airport, healthcheck)
 
 # This function retrieves the waiting time at Dublin airport
+@_track("DUB")
 def dublin():
     # Define initial values
     healthcheck = os.environ.get("DUB_HEALTHCHECK") 
@@ -416,6 +474,7 @@ def dublin():
     
     process_airport_result(queue, airport, healthcheck)
 
+@_track("EDI")
 def edinburgh():
     # Environment variable for your Healthchecks ping URL
     healthcheck = os.environ.get("EDI_HEALTHCHECK")
@@ -448,6 +507,7 @@ def edinburgh():
 
 
 # This function retrieves the waiting time at Oslo airport
+@_track("OSL")
 def oslo():
     # Define initial values
     healthcheck = os.environ.get("OSL_HEALTHCHECK") 
@@ -511,6 +571,7 @@ def oslo():
 #     print("Airport "+str(airport)+" was completed with the following status. Database: "+str(database_write_status)+". Firebase: "+str(firebase_write_status)+". Healthcheck: "+str(healthcheck_perform_status)+". Queue is "+str(queue)+" at "+str(timestamp))
 
 
+@_track("AMS")
 def amsterdam():
     # Define initial values
     healthcheck = os.environ.get("AMS_HEALTHCHECK") 

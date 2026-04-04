@@ -9,6 +9,8 @@ requests = "*"
 datetime = "*"
 supabase = "*"
 firebase_admin = "*"
+prometheus-client = "*"
+flask = "*"
 
 [dev-packages]
 

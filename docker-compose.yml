@@ -54,6 +54,8 @@ services:
     image: "ghcr.io/simonottosen/cph-security_fetchtime:main"
     container_name: "universal_fetchtime"
     user: user
+    ports:
+      - "9090:9090"
     depends_on:
       - cph_postgres_db
     environment:

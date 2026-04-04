@@ -538,13 +538,14 @@ useEffect(() => {
                 </Link>
             </li>
             <li>
-                <Link
+                <a
                 href="https://waitport.com/api/v1/all?order=id.desc&limit=100"
                 className="mx-2 hover:text-gray-700 dark:hover:text-gray-300"
                 target="_blank"
+                rel="noopener noreferrer"
               >
                 {t('api')}
-              </Link>
+              </a>
             </li>
             <li>
                 <Link

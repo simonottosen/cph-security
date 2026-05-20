@@ -5,7 +5,24 @@ create table if not exists waitingtime (
   airport text
 );
 
+grant usage on schema public to anon, authenticated, service_role;
 
-create role web_anon nologin;
-grant usage on schema public to web_anon;
-grant select on public.waitingtime to web_anon;
+grant select
+  on public.waitingtime
+  to anon;
+
+grant select, insert, update, delete
+  on public.waitingtime
+  to authenticated;
+
+grant select, insert, update, delete
+  on public.waitingtime
+  to service_role;
+
+alter table public.waitingtime
+  enable row level security;
+
+create policy "anon can read waitingtime"
+  on public.waitingtime
+  for select to anon
+  using (true);

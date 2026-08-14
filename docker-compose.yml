@@ -174,9 +174,21 @@ services:
       - cph_postgrest
     environment:
       CPHAPI_HOST: ${CPHAPI_HOST}
-      SUPABASE_URL: ${SUPABASE_URL}
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      MODELS_DIR: /models
+    volumes:
+      - ml_models:/models
+    # Cold start only: train once if no model exists yet, then serve. Ofelia
+    # (labels below) refreshes the model daily out-of-process; gunicorn workers
+    # hot-reload the artifact from the shared volume when its mtime changes.
+    command:
+      - sh
+      - -c
+      - '[ -f /models/model.joblib ] || python /project/train.py || true; exec gunicorn --bind 0.0.0.0:5000 --workers 2 --threads 4 --timeout 120 app:app'
     restart: unless-stopped
+    labels:
+      - "ofelia.enabled=true"
+      - "ofelia.job-exec.ml-train.schedule=@every 24h"
+      - "ofelia.job-exec.ml-train.command=python /project/train.py"
 
 
   autogluon:
@@ -184,5 +196,14 @@ services:
     container_name: "autogluon"
     environment:
       CPHAPI_HOST: ${CPHAPI_HOST}
+      FORECAST_DIR: /forecasts
+    volumes:
+      - autogluon_forecasts:/forecasts
     restart: unless-stopped
+
+volumes:
+  # Shared model artifact written by the trainer and read by the serving app.
+  ml_models:
+  # Last-good forecasts, so a restart never serves an empty /forecast.
+  autogluon_forecasts:
 

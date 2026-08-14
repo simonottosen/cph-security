@@ -1,9 +1,7 @@
-flask==3.1.2
-pandas==2.3.2
-holidays==0.79
-flask-caching==2.3.1
-flask_crontab==0.1.2
+flask==3.1.3
+gunicorn==23.0.0
+pandas==2.3.3
+holidays==0.83
 xgboost==3.0.4
-scikit-learn==1.7.1
-supabase==2.18.1
-python-dotenv==1.1.1
+joblib==1.4.2
+requests==2.32.3

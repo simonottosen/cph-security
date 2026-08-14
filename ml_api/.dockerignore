@@ -5,3 +5,7 @@
 !project/
 project/*
 !project/app.py
+!project/model.py
+!project/features.py
+!project/data.py
+!project/train.py

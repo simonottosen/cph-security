@@ -14,5 +14,11 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir -r /project/requirements.txt
 
 COPY project/app.py /project/app.py
+COPY project/model.py /project/model.py
+COPY project/features.py /project/features.py
+COPY project/data.py /project/data.py
+COPY project/train.py /project/train.py
 
-CMD ["python", "/project/app.py", "-h", "0.0.0.0"]
+# Serve under gunicorn (the Flask dev server is not for production). The trainer
+# runs the same image but overrides the command with: python train.py
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "4", "--timeout", "120", "app:app"]

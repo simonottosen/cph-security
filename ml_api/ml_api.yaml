@@ -1,3 +1,18 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ml-api-models
+spec:
+  # ReadWriteMany so every serving replica can read the model while the training
+  # CronJob writes it. Requires a storage class that supports RWX (e.g. NFS). If
+  # your cluster only offers ReadWriteOnce, set replicas: 1 on the Deployment.
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -6,7 +21,7 @@ spec:
   selector:
     matchLabels:
       app: ml-api
-  replicas: 3 # tells deployment to run 2 pods matching the template
+  replicas: 3 # serving replicas; they only read the shared model artifact
   template:
     metadata:
       labels:
@@ -21,6 +36,48 @@ spec:
         env:
         - name: CPHAPI_HOST
           value: "https://cphapi.simonottosen.dk"
+        - name: MODELS_DIR
+          value: "/models"
+        volumeMounts:
+        - name: models
+          mountPath: /models
+          readOnly: true
+      volumes:
+      - name: models
+        persistentVolumeClaim:
+          claimName: ml-api-models
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ml-api-trainer
+spec:
+  # Retrain daily out-of-process; the serving pods hot-reload the new artifact.
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: trainer
+            image: ghcr.io/simonottosen/cph-security_ml_api:arm64-latest
+            imagePullPolicy: "Always"
+            command: ["python", "/project/train.py"]
+            env:
+            - name: CPHAPI_HOST
+              value: "https://cphapi.simonottosen.dk"
+            - name: MODELS_DIR
+              value: "/models"
+            volumeMounts:
+            - name: models
+              mountPath: /models
+          volumes:
+          - name: models
+            persistentVolumeClaim:
+              claimName: ml-api-models
 
 ---
 kind: Service

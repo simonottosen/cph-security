@@ -9,6 +9,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { SparkAreaChart } from "@/components/SparkChart";
 import { useI18n } from "@/i18n/I18nProvider";
+import { fetchEffectiveQueue } from "@/lib/liveQueue";
+import { fetchForecast } from "@/lib/forecast";
 
 // Define TypeScript type for airport codes
 type AirportCode =
@@ -47,7 +49,11 @@ type SparkPoint = {
 const AirportSparkline: React.FC<{ code: AirportCode }> = ({ code }) => {
   const [data, setData] = useState<SparkPoint[]>([]);
   const [forecastData, setForecastData] = useState<{ time: string; Prediction: number }[]>([]);
-  const currentQueue = data.length ? data[data.length - 1].Queue : null;
+  const [effectiveQueue, setEffectiveQueue] = useState<number | null>(null);
+  // Effective "now" value: ML prediction when live data is stale, else the
+  // most recent real point.
+  const currentQueue =
+    effectiveQueue ?? (data.length ? data[data.length - 1].Queue : null);
 
   // Compare current queue with the final forecast point
   const lastForecast = forecastData.length
@@ -83,33 +89,32 @@ const AirportSparkline: React.FC<{ code: AirportCode }> = ({ code }) => {
   }, [code]);
 
   useEffect(() => {
-    const fetchForecast = async () => {
-      try {
-        const res = await axios.get<{ predictions: { timestamp: string; mean: number }[] }>(
-          `https://waitport.com/api/v1/forecast/${code}`,
-        );
-        const future = res.data.predictions ?? [];
-        const formatted = future.slice(0, 8).map((p) => {
-          const d = new Date(p.timestamp);
-          d.setHours(d.getHours() + 2); // shift to CPH local time
-          return {
-            time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            Prediction: Math.max(0, p.mean),
-          };
-        });
-        setForecastData(formatted);
-      } catch {
-        setForecastData([]);
-      }
-    };
-    fetchForecast();
+    fetchEffectiveQueue(code)
+      .then(setEffectiveQueue)
+      .catch(() => setEffectiveQueue(null));
+  }, [code]);
+
+  useEffect(() => {
+    fetchForecast(code)
+      .then((points) =>
+        setForecastData(
+          points.slice(0, 8).map((p) => ({
+            time: p.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            Prediction: p.mean,
+          })),
+        ),
+      )
+      .catch(() => setForecastData([]));
   }, [code]);
 
   const chartSeries = useMemo(() => {
     // Smooth transition (3t² − 2t³) between last real point and forecast
     const smoothstep = (t: number) => 3 * t * t - 2 * t * t * t;
 
-    const lastQueueValue = data.length ? data[data.length - 1].Queue : null;
+    const lastIdx = data.length - 1;
+    // Terminal "now" point = effective value (prediction when stale) so the
+    // sparkline line + dot end on the displayed badge value.
+    const lastQueueValue = currentQueue;
 
     const blendedFuture = forecastData.map((p, idx) => {
       if (lastQueueValue === null) {
@@ -124,10 +129,13 @@ const AirportSparkline: React.FC<{ code: AirportCode }> = ({ code }) => {
     });
 
     return [
-      ...data.map((d) => ({ time: d.time, Queue: d.Queue })),
+      ...data.map((d, idx) => ({
+        time: d.time,
+        Queue: idx === lastIdx && lastQueueValue !== null ? lastQueueValue : d.Queue,
+      })),
       ...blendedFuture,
     ];
-  }, [data, forecastData]);
+  }, [data, forecastData, currentQueue]);
 
   // Memoized: dot vertical position aligned to chart zero-baseline
   const dotTopPct = useMemo(() => {

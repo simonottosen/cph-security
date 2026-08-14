@@ -13,15 +13,6 @@ export type AirportCode =
   | 'dub'
   | 'ist';
 
-/** One point in the Autogluon forecast */
-export interface ForecastPoint {
-  /** Timestamp in ISO format or any string parseable by Date */
-  timestamp: string;
-  Average: number;
-  Low: number;
-  High: number;
-}
-
 /** Queue length at a specific time */
 export interface QueuePoint {
   /** Formatted time string (e.g. "14:30") */

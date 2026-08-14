@@ -18,10 +18,11 @@ import 'react-datepicker/dist/react-datepicker.css';
 /* ------------------------------------------------------------------ */
 import {
   AirportCode,
-  ForecastPoint,
   QueuePoint,
   airportNames,
 } from '@/lib/airports';
+import { fetchEffectiveQueue } from '@/lib/liveQueue';
+import { ForecastPoint, fetchForecast } from '@/lib/forecast';
 
 const API_URL = process.env.NEXT_PUBLIC_API_HOST || '/api/v1/predict';
 
@@ -87,10 +88,8 @@ const ClientPage: React.FC = () => {
     const fetchQueue = async () => {
       try {
         setLoadingQueue(true);
-        const res = await axios.get<{ queue: number }[]>(
-          `https://waitport.com/api/v1/all?airport=eq.${code.toUpperCase()}&limit=1&select=queue&order=id.desc`,
-        );
-        setQueue(res.data[0]?.queue ?? 0);
+        const effective = await fetchEffectiveQueue(code);
+        setQueue(effective ?? 0);
       } finally {
         setLoadingQueue(false);
       }
@@ -159,20 +158,16 @@ useEffect(() => {
         setLoadingPredicted(true);
 
         // Try to derive prediction from the richer /forecast endpoint first
-        const forecastRes = await axios.get<{ predictions: { timestamp: string; mean: number }[] }>(
-          `https://waitport.com/api/v1/forecast/${code}`,
-        );
+        const points = await fetchForecast(code);
 
         const targetTime = selectedDateTime.getTime();
         const toleranceMs = 15 * 60 * 1000; // 15‑minute window
 
-        const match = forecastRes.data.predictions?.find(p => {
-          const tLocal = new Date(p.timestamp);
-          tLocal.setHours(tLocal.getHours() + 2); // shift to CPH
-          return Math.abs(tLocal.getTime() - targetTime) <= toleranceMs;
-        });
+        const match = points.find(
+          p => Math.abs(p.time.getTime() - targetTime) <= toleranceMs,
+        );
 
-        if (match && typeof match.mean === 'number') {
+        if (match) {
           // Use the forecast value if it's within the time window
           setPredictedQueueLength(Math.round(match.mean));
         } else {
@@ -192,51 +187,24 @@ useEffect(() => {
   }, [code, selectedDateTime]);
 
   useEffect(() => {
-    const fetchForecast = async () => {
+    const loadForecast = async () => {
       try {
         setLoadingForecast(true);
-        const res = await axios.get<{ predictions: any[] }>(
-          `https://waitport.com/api/v1/forecast/${code}`,
-        );
-        // Keep only predictions that are in the future (local CPH time)
-        const future = res.data.predictions?.filter(p => {
-          const d = new Date(p.timestamp);
-          d.setHours(d.getHours() + 2); // shift to CPH
-          return d.getTime() >= Date.now();
-        }) ?? [];
-
-        const formatted = future.map(p => {
-          const date = new Date(p.timestamp);
-          date.setHours(date.getHours() + 2); // shift to CPH
-          const time = date.toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          });
-          return {
-            timestamp: time,
-            Average: Math.max(0, p.mean),
-            Low: Math.max(0, p.q30),
-            High: Math.max(0, p.q70),
-          };
-        });
-        // Derive horizon (last timestamp minus now, in hours)
-        if (future.length) {
-          const last = new Date(future[future.length - 1].timestamp);
-          last.setHours(last.getHours() + 2); // shift to CPH
-          const hours = Math.max(
-            1,
-            Math.round((last.getTime() - Date.now()) / (1000 * 60 * 60)),
+        const points = await fetchForecast(code);
+        if (points.length) {
+          const last = points[points.length - 1].time;
+          setForecastHorizon(
+            Math.max(1, Math.round((last.getTime() - Date.now()) / (1000 * 60 * 60))),
           );
-          setForecastHorizon(hours);
         } else {
           setForecastHorizon(null);
         }
-        setForecastData(formatted);
+        setForecastData(points);
       } finally {
         setLoadingForecast(false);
       }
     };
-    fetchForecast();
+    loadForecast();
   }, [code]);
 
   // Derive predicted average over the next two hours (first 8 forecast points = 2 h)
@@ -246,12 +214,7 @@ useEffect(() => {
       return;
     }
     const window = forecastData.slice(0, 8); // 8 × 15‑min = 2 h
-    if (!window.length) {
-      setAvgNextTwoHours(null);
-      return;
-    }
-    const avg =
-      window.reduce((sum, p) => sum + p.Average, 0) / window.length;
+    const avg = window.reduce((sum, p) => sum + p.mean, 0) / window.length;
     setAvgNextTwoHours(Math.round(Math.max(0, avg)));
   }, [forecastData]);
 
@@ -259,38 +222,48 @@ useEffect(() => {
   useEffect(() => {
     if (!queueSeries.length && !forecastData.length) return;
 
-    // Copy the last real queue value into the Prediction series as well,
+    const lastIdx = queueSeries.length - 1;
+
+    // Align the terminal "now" point with the displayed effective queue value
+    // (an ML prediction when live data is stale) so the chart endpoint matches
+    // the big "now" number. Earlier history is left as real data.
+    const lastQueue =
+      queue !== null
+        ? queue
+        : queueSeries.length
+        ? queueSeries[lastIdx].queue
+        : null;
+
+    // Copy the last queue value into the Prediction series as well,
     // so the two lines meet without a gap.
-    const past = queueSeries.map((p, idx) => ({
-      time: p.time,
-      Past: p.queue,
-      Prediction: idx === queueSeries.length - 1 ? p.queue : null,
-    }));
+    const past = queueSeries.map((p, idx) => {
+      const value = idx === lastIdx && lastQueue !== null ? lastQueue : p.queue;
+      return {
+        time: p.time,
+        Past: value,
+        Prediction: idx === lastIdx ? value : null,
+      };
+    });
 
     // Easing helper (smoothstep: 3t² − 2t³) for a soft transition
     const smoothstep = (t: number) => 3 * t * t - 2 * t * t * t;
 
-    const lastQueue = queueSeries.length
-      ? queueSeries[queueSeries.length - 1].queue
-      : null;
-
     const future = forecastData.map((p, idx) => {
+      const time = p.time.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
       // If we don't have a last real queue value, fall back to the raw prediction
       if (lastQueue === null) {
-        return {
-          time: p.timestamp,
-          Prediction: Math.max(0, p.Average),
-        };
+        return { time, Prediction: p.mean };
       }
 
       const progress = (idx + 1) / forecastData.length; // 0‒1
       const blend = smoothstep(progress);
-      const blendedValue = Math.max(0, lastQueue * (1 - blend) + p.Average * blend);
+      const blendedValue = Math.max(0, lastQueue * (1 - blend) + p.mean * blend);
 
-      return {
-        time: p.timestamp,
-        Prediction: blendedValue,
-      };
+      return { time, Prediction: blendedValue };
     });
 
     const merged = [...past, ...future];
@@ -302,7 +275,7 @@ useEffect(() => {
         ? past.length / (merged.length - 1)
         : 0;
     setTransitionRatio(ratio);
-  }, [queueSeries, forecastData]);
+  }, [queueSeries, forecastData, queue]);
 
   /* -------------------- RENDER CALC -------------------- */
   const diffMinutes = Math.round(
@@ -405,9 +378,11 @@ useEffect(() => {
                         fill-opacity: 0.15;
                       }
                     `}</style>
-                    <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
-                      {t('expectedQueueHorizon', { hours: forecastHorizon ?? 6 })}
-                    </p>
+                    {forecastHorizon !== null && (
+                      <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+                        {t('expectedQueueHorizon', { hours: forecastHorizon })}
+                      </p>
+                    )}
                   </>
                 )}
                   </>

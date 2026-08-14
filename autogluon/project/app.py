@@ -1,16 +1,30 @@
+"""Chronos-2 forecasting service for airport security queue wait times.
+
+All airports are forecast in a single batched ``predict_df(cross_learning=True)``
+call so the model can share signal across related series (helps the low-data
+airports most). Forecasts are persisted to disk and reloaded on startup, so
+``/forecast`` always serves the last-good result — across restarts and before
+the first fresh run of a freshly started worker completes.
+
+Module import is side-effect-free: the backtest harness imports the context
+helpers directly. Call :func:`_initialize` (from ``__main__`` or the gunicorn
+``post_worker_init`` hook) to load persisted state and start the scheduler.
+"""
+from __future__ import annotations
+
 import datetime
 import importlib
+import json
 import logging
-import multiprocessing as mp
 import os
 import platform
+import tempfile
+import threading
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import numpy as np
 import pandas as pd
 import requests
-from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
 from flask import Flask, jsonify
 
@@ -20,6 +34,15 @@ try:
 except Exception as exc:  # pragma: no cover - runtime dependency availability check
     BaseChronosPipeline = None
     _chronos_import_error = exc
+
+# Imported lazily so the module (and its context helpers) stay importable in
+# environments without apscheduler — e.g. the backtest harness and unit tests.
+_apscheduler_import_error = None
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+except Exception as exc:  # pragma: no cover - runtime dependency availability check
+    BackgroundScheduler = None
+    _apscheduler_import_error = exc
 
 load_dotenv()
 
@@ -62,15 +85,48 @@ PREDICTION_LENGTH = int(os.environ.get("PREDICTION_LENGTH", "96"))
 RESAMPLE_FREQUENCY = os.environ.get("RESAMPLE_FREQUENCY", "5min")
 CONTEXT_DAYS = int(os.environ.get("CONTEXT_DAYS", "60"))
 MAX_FILL_GAP_STEPS = int(os.environ.get("MAX_FILL_GAP_STEPS", "6"))
-QUANTILE_LEVELS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+
+# Cross-series learning: forecast all airports jointly so the model shares
+# information across related series. Task-dependent, hence backtest-gated
+# (eval/backtest.py can toggle it with --chronos-no-cross-learning).
+CROSS_LEARNING = os.environ.get("CROSS_LEARNING", "true").strip().lower() in ("1", "true", "yes", "on")
+
+# Refresh cadence (hours). Shorter than the old 4 h so forecasts stay fresh;
+# combined with on-disk persistence this removes stale/empty windows.
+FORECAST_INTERVAL_HOURS = float(os.environ.get("FORECAST_INTERVAL_HOURS", "1"))
+
+# Where last-good forecasts are persisted so restarts don't blank /forecast.
+FORECAST_DIR = os.environ.get("FORECAST_DIR", os.environ.get("MODELS_DIR", "forecasts"))
+
+FETCH_TIMEOUT = int(os.environ.get("FETCH_TIMEOUT", "60"))
+
+# 21-level quantile grid (was 9). Deciles keep 1-decimal public API keys
+# ("0.1".."0.9") for backward compatibility; finer levels use their shortest
+# string form ("0.05", "0.15", ...). See _api_quantile_key.
+QUANTILE_LEVELS = [
+    0.01, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5,
+    0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99,
+]
 
 VALID_AIRPORTS = ["AMS", "ARN", "CPH", "DUB", "DUS", "FRA", "IST", "LHR", "EDI", "MUC"]
+
+# Known-future + historical covariates attached to every context/future frame.
+COVARIATE_COLUMNS = [
+    "hour", "minute", "day_of_week", "is_weekend", "month",
+    "tod_sin", "tod_cos", "tow_sin", "tow_cos", "doy_sin", "doy_cos",
+    "queue_lag_30d", "queue_lag_365d", "queue_avg_dow_time", "queue_avg_time",
+]
 
 _chronos2_pipeline = None
 
 
 class _NaiveFallbackPipeline:
-    """Minimal predict_df-compatible fallback used when Chronos isn't installed."""
+    """Minimal predict_df-compatible fallback used when Chronos isn't installed.
+
+    Mirrors the real Chronos-2 output schema (a ``predictions`` point column and
+    ``str(q)`` quantile columns) so the serving/formatting code path is the same
+    whether or not the model is present. Predictions are last-value carry-forward.
+    """
 
     @staticmethod
     def predict_df(
@@ -90,10 +146,10 @@ class _NaiveFallbackPipeline:
             base = future_df[[id_column, timestamp_column]].copy()
         else:
             out_rows = []
+            offset = pd.tseries.frequencies.to_offset(RESAMPLE_FREQUENCY)
             for item_id, grp in df.groupby(id_column):
                 grp = grp.sort_values(timestamp_column)
                 last_ts = pd.to_datetime(grp[timestamp_column].iloc[-1])
-                offset = pd.tseries.frequencies.to_offset(RESAMPLE_FREQUENCY)
                 future_ts = pd.date_range(last_ts + offset, periods=prediction_length, freq=offset)
                 out_rows.append(pd.DataFrame({id_column: item_id, timestamp_column: future_ts}))
             base = pd.concat(out_rows, ignore_index=True) if out_rows else pd.DataFrame(columns=[id_column, timestamp_column])
@@ -105,9 +161,9 @@ class _NaiveFallbackPipeline:
             .last()
             .to_dict()
         )
-        out["mean"] = out[id_column].map(last_values).astype(float)
+        out["predictions"] = out[id_column].map(last_values).astype(float)
         for q in quantile_levels:
-            out[f"{q:.1f}"] = out["mean"]
+            out[str(q)] = out["predictions"]
         return out
 
 
@@ -383,33 +439,59 @@ def _build_future_covariates(context_df, code, cov_tables):
 
 
 def _quantile_column_name(pred_df, quantile):
-    candidates = [f"{quantile:.1f}", quantile, str(quantile)]
+    """Find the column in a predict_df output holding ``quantile``.
+
+    Chronos-2 names quantile columns by ``str(q)`` (e.g. "0.1", "0.05"). We try
+    the shortest string forms and the float key, and only fall back to 1-decimal
+    formatting for true deciles — otherwise 0.05 would map onto the "0.1" column.
+    """
+    q = float(quantile)
+    columns = pred_df.columns
+    candidates = [str(q), f"{q:g}", q]
+    if abs(round(q, 1) - q) < 1e-9:
+        candidates.append(f"{q:.1f}")
     for c in candidates:
-        if c in pred_df.columns:
+        if c in columns:
             return c
     return None
 
 
+def _api_quantile_key(quantile):
+    """Public JSON key for a quantile level.
+
+    Deciles keep their historical 1-decimal keys ("0.1".."0.9") for backward
+    compatibility; finer levels use their shortest string form ("0.05", ...).
+    """
+    q = float(quantile)
+    if abs(round(q, 1) - q) < 1e-9:
+        return f"{q:.1f}"
+    return f"{q:g}"
+
+
 def _format_predictions(pred_df):
-    """Format Chronos prediction dataframe into API response records."""
-    quantile_cols = {
-        q: _quantile_column_name(pred_df, q)
-        for q in QUANTILE_LEVELS
-    }
-    mean_col = "mean" if "mean" in pred_df.columns else quantile_cols.get(0.5)
+    """Format a Chronos prediction dataframe into API response records."""
+    quantile_cols = {q: _quantile_column_name(pred_df, q) for q in QUANTILE_LEVELS}
+    if "predictions" in pred_df.columns:
+        mean_col = "predictions"
+    elif "mean" in pred_df.columns:
+        mean_col = "mean"
+    else:
+        mean_col = quantile_cols.get(0.5)
 
     rows = []
     for _, row in pred_df.sort_values("timestamp").iterrows():
+        mean_val = row[mean_col] if mean_col is not None else None
         rec = {
             "timestamp": pd.to_datetime(row["timestamp"]).strftime("%Y-%m-%dT%H:%M:%S"),
-            "mean": float(row[mean_col]) if mean_col is not None else None,
+            "mean": float(mean_val) if mean_val is not None and pd.notna(mean_val) else None,
         }
 
         for q in QUANTILE_LEVELS:
             col = quantile_cols.get(q)
-            if col is not None:
-                rec[f"{q:.1f}"] = float(row[col])
+            if col is not None and pd.notna(row[col]):
+                rec[_api_quantile_key(q)] = float(row[col])
 
+        # Frontend Low/High band aliases (waitport airport page).
         if "0.3" in rec:
             rec["q30"] = rec["0.3"]
         if "0.7" in rec:
@@ -420,26 +502,58 @@ def _format_predictions(pred_df):
     return rows
 
 
-def _forecast_airport(code, df_raw, pipeline):
-    """Forecast for a single airport code using Chronos-2."""
-    context_df, prep_stats, cov_tables = _prepare_airport_context(df_raw, code)
-    if context_df is None:
-        pred_records = _single_line_message(code, prep_stats["status_message"])
-        metrics = {
-            "model": CHRONOS2_MODEL_ID,
-            "device_map": CHRONOS2_DEVICE_MAP,
-            "prediction_length": PREDICTION_LENGTH,
-            "total_time_seconds": 0.0,
-            "last_trained": datetime.datetime.now().isoformat(),
-            **prep_stats,
-        }
-        return code, pred_records, metrics
+def _prep_only_metrics(stats):
+    """Metrics record for an airport that never reached the model (prep failed)."""
+    record = {
+        "model": CHRONOS2_MODEL_ID,
+        "device_map": CHRONOS2_DEVICE_MAP,
+        "cross_learning": CROSS_LEARNING,
+        "prediction_length": PREDICTION_LENGTH,
+        "total_time_seconds": 0.0,
+        "last_trained": datetime.datetime.now().isoformat(),
+    }
+    record.update(stats or {})
+    return record
 
-    future_df = _build_future_covariates(context_df, code, cov_tables)
+
+def _load_raw():
+    """Fetch the full raw history frame from PostgREST."""
+    response = requests.get(CPHAPI_HOST, timeout=FETCH_TIMEOUT)
+    response.raise_for_status()
+    return pd.DataFrame(response.json())
+
+
+def _run_forecast(df_raw):
+    """Forecast every airport in one batched cross-learning predict_df call.
+
+    Returns ``(forecasts, metrics)`` dicts keyed by airport code. Airports
+    without enough history get an informational message instead of a forecast.
+    """
+    contexts, futures, prep_stats = [], [], {}
+    forecasts, metrics = {}, {}
+
+    for code in VALID_AIRPORTS:
+        ctx, stats, cov = _prepare_airport_context(df_raw, code)
+        prep_stats[code] = stats
+        if ctx is None:
+            forecasts[code] = _single_line_message(code, stats["status_message"])
+            metrics[code] = _prep_only_metrics(stats)
+            continue
+        contexts.append(ctx)
+        futures.append(_build_future_covariates(ctx, code, cov))
+
+    if not contexts:
+        return forecasts, metrics
+
+    context_df = pd.concat(contexts, ignore_index=True)
+    future_df = pd.concat(futures, ignore_index=True)
+
+    pipeline = get_chronos2_pipeline()
     start = time.time()
     pred_df = pipeline.predict_df(
         context_df,
         future_df=future_df,
+        cross_learning=CROSS_LEARNING,
         prediction_length=PREDICTION_LENGTH,
         quantile_levels=QUANTILE_LEVELS,
         id_column="item_id",
@@ -448,85 +562,154 @@ def _forecast_airport(code, df_raw, pipeline):
     )
     duration = time.time() - start
 
-    if "item_id" in pred_df.columns:
-        pred_df = pred_df[pred_df["item_id"] == code].copy()
+    by_item = {code: g for code, g in pred_df.groupby("item_id")} if "item_id" in pred_df.columns else {}
+    ctx_lengths = context_df.groupby("item_id").size().to_dict()
+    fut_lengths = future_df.groupby("item_id").size().to_dict()
+    n_items = len(contexts)
 
-    pred_records = _format_predictions(pred_df)
+    for ctx in contexts:
+        code = ctx["item_id"].iloc[0]
+        group = by_item.get(code)
+        stats = prep_stats.get(code, {})
+        if group is None or len(group) == 0:
+            forecasts[code] = _single_line_message(code, "No predictions returned by model")
+            metrics[code] = _prep_only_metrics(stats)
+            continue
 
-    metrics = {
-        "model": CHRONOS2_MODEL_ID,
-        "device_map": CHRONOS2_DEVICE_MAP,
-        "history_rows": int(len(context_df)),
-        "future_rows": int(len(future_df)),
-        "prediction_length": PREDICTION_LENGTH,
-        "covariate_columns": [
-            "hour",
-            "minute",
-            "day_of_week",
-            "is_weekend",
-            "month",
-            "tod_sin",
-            "tod_cos",
-            "tow_sin",
-            "tow_cos",
-            "doy_sin",
-            "doy_cos",
-            "queue_lag_30d",
-            "queue_lag_365d",
-            "queue_avg_dow_time",
-            "queue_avg_time",
-        ],
-        "total_time_seconds": duration,
-        "last_trained": datetime.datetime.now().isoformat(),
-        **prep_stats,
-    }
-    return code, pred_records, metrics
+        forecasts[code] = _format_predictions(group)
+        record = {
+            "model": CHRONOS2_MODEL_ID,
+            "device_map": CHRONOS2_DEVICE_MAP,
+            "cross_learning": CROSS_LEARNING,
+            "batched_items": n_items,
+            "history_rows": int(ctx_lengths.get(code, len(ctx))),
+            "future_rows": int(fut_lengths.get(code, 0)),
+            "prediction_length": PREDICTION_LENGTH,
+            "quantile_levels": QUANTILE_LEVELS,
+            "covariate_columns": COVARIATE_COLUMNS,
+            "total_time_seconds": duration,  # shared across the batched call
+            "last_trained": datetime.datetime.now().isoformat(),
+        }
+        record.update(stats)
+        metrics[code] = record
 
-
-def _train_airport(code, df_raw):
-    """Backward-compatible training/forecast entrypoint used by retrain and tests."""
-    pipeline = get_chronos2_pipeline()
-    return _forecast_airport(code, df_raw, pipeline)
+    return forecasts, metrics
 
 
-# Placeholder for latest forecasting metrics
+# ---------------------------------------------------------------------------
+# Forecast persistence (survive restarts; never serve an empty /forecast).
+# ---------------------------------------------------------------------------
+def _forecast_state_path():
+    return os.path.join(FORECAST_DIR, "forecasts.json")
+
+
+def _persist_forecasts(forecasts, metrics):
+    try:
+        os.makedirs(FORECAST_DIR, exist_ok=True)
+        payload = {
+            "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "predictions": forecasts,
+            "metrics": metrics,
+        }
+        fd, tmp = tempfile.mkstemp(dir=FORECAST_DIR, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as fh:
+                json.dump(payload, fh)
+            os.replace(tmp, _forecast_state_path())
+        finally:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+    except Exception as exc:  # noqa: BLE001 - persistence is best-effort
+        logger.warning("Could not persist forecasts to %s: %s", FORECAST_DIR, exc)
+
+
+def _load_persisted_forecasts():
+    path = _forecast_state_path()
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path) as fh:
+            return json.load(fh)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not load persisted forecasts from %s: %s", path, exc)
+        return None
+
+
+# Latest per-airport forecasts and metrics (rebound atomically by retrain()).
 train_metrics = {}
-
-# Containers for per-airport forecasts and metrics
 df_preds = {}
+_state_lock = threading.Lock()
+
+_scheduler = None
+_initialized = False
+_init_lock = threading.Lock()
 
 app = Flask(__name__)
 
 
 def retrain():
+    """Refresh all forecasts. Best-effort: on failure, keep the last-good state."""
     global df_preds, train_metrics
-    df_preds.clear()
-    train_metrics.clear()
 
-    response = requests.get(CPHAPI_HOST, timeout=60)
-    response.raise_for_status()
-    df_raw = pd.DataFrame(response.json())
+    try:
+        df_raw = _load_raw()
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Failed to load history for retrain; keeping last-good: %s", exc)
+        return
 
-    with ProcessPoolExecutor(max_workers=min(len(VALID_AIRPORTS), os.cpu_count() or 1)) as executor:
-        futures = {executor.submit(_train_airport, code, df_raw): code for code in VALID_AIRPORTS}
-        for future in as_completed(futures):
-            code = futures[future]
-            try:
-                code, pred_records, metrics = future.result()
-                df_preds[code] = pred_records
-                train_metrics[code] = metrics
-            except Exception as e:
-                logger.exception("Error forecasting airport %s: %s", code, e)
-                df_preds[code] = _single_line_message(code, f"Forecast failed: {e}")
-                train_metrics[code] = {
-                    "model": CHRONOS2_MODEL_ID,
-                    "device_map": CHRONOS2_DEVICE_MAP,
-                    "prediction_length": PREDICTION_LENGTH,
-                    "total_time_seconds": 0.0,
-                    "last_trained": datetime.datetime.now().isoformat(),
-                    "status": "error",
-                    "status_message": str(e),
-                }
+    try:
+        forecasts, metrics = _run_forecast(df_raw)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Batched forecast failed; keeping last-good: %s", exc)
+        return
+
+    with _state_lock:
+        df_preds = forecasts
+        train_metrics = metrics
+
+    _persist_forecasts(forecasts, metrics)
+    n_ok = sum(1 for recs in forecasts.values() if recs and "mean" in recs[0])
+    logger.info("Retrain complete: %d/%d airports forecast", n_ok, len(VALID_AIRPORTS))
+
+
+def _initialize():
+    """Load persisted forecasts and start the scheduler. Idempotent."""
+    global df_preds, train_metrics, _scheduler, _initialized
+
+    with _init_lock:
+        if _initialized:
+            return
+
+        payload = _load_persisted_forecasts()
+        if payload:
+            with _state_lock:
+                df_preds = payload.get("predictions", {}) or {}
+                train_metrics = payload.get("metrics", {}) or {}
+            logger.info("Loaded persisted forecasts for %d airports", len(df_preds))
+
+        if BackgroundScheduler is None:
+            logger.warning(
+                "apscheduler unavailable (%s); running one-shot retrain without scheduling.",
+                _apscheduler_import_error,
+            )
+            _initialized = True
+            retrain()
+            return
+
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(
+            func=retrain,
+            trigger="interval",
+            hours=FORECAST_INTERVAL_HOURS,
+            next_run_time=datetime.datetime.now(),  # kick an immediate, non-blocking refresh
+            id="retrain",
+            max_instances=1,
+            coalesce=True,
+        )
+        scheduler.start()
+        _scheduler = scheduler
+        _initialized = True
+        logger.info("Scheduler started: retrain every %.2f h", FORECAST_INTERVAL_HOURS)
 
 
 @app.route('/forecast/<airport>', methods=['GET'])
@@ -534,21 +717,32 @@ def get_forecast(airport):
     code = airport.upper()
     if code not in VALID_AIRPORTS:
         return jsonify({'error': f'Invalid airport code: {airport}'}), 404
-    return jsonify({'predictions': df_preds.get(code, [])})
+    with _state_lock:
+        preds = df_preds.get(code, [])
+    return jsonify({'predictions': preds})
 
 
 @app.route('/metrics', methods=['GET'])
 def get_metrics():
     """Return latest forecasting metrics."""
-    return jsonify(train_metrics)
+    with _state_lock:
+        return jsonify(dict(train_metrics))
+
+
+@app.route('/health', methods=['GET'])
+def health():
+    with _state_lock:
+        n = len(df_preds)
+    return jsonify({
+        "status": "ok",
+        "airports_loaded": n,
+        "chronos_available": BaseChronosPipeline is not None,
+        "cross_learning": CROSS_LEARNING,
+        "prediction_length": PREDICTION_LENGTH,
+        "quantile_levels": QUANTILE_LEVELS,
+    })
 
 
 if __name__ == '__main__':
-    mp.freeze_support()  # Good practice on Windows; harmless on *nix
-    retrain()            # First full forecasting pass
-
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(func=retrain, trigger='interval', hours=4)
-    scheduler.start()
-
-    app.run(host='0.0.0.0', port="5000")
+    _initialize()
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", "5000")))

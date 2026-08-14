@@ -22,6 +22,11 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \
         torch==2.9.1 torchvision==0.24.1
 
-COPY project/app.py /project/app.py
+# Production WSGI server. Installed separately (not via the pipenv lockfile) so
+# --deploy stays valid without regenerating Pipfile.lock.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir gunicorn==23.0.0
 
-CMD ["python", "/project/app.py", "-h", "0.0.0.0"]
+COPY project/app.py project/gunicorn.conf.py /project/
+
+CMD ["gunicorn", "-c", "/project/gunicorn.conf.py", "app:app"]

@@ -1,156 +1,74 @@
+"""Unit tests for the deterministic calendar covariates (``_add_time_covariates``).
 
-
-"""
-Unit tests for *feature‑engineering* helpers in **project.app**.
-
-The production code base provides a helper that takes a raw time‑series
-DataFrame and expands it with deterministic features such as:
-
-* Hour‑of‑day sine / cosine (``hour_sin``, ``hour_cos``)
-* Day‑of‑week sine / cosine (``dow_sin``, ``dow_cos``)
-* Rolling aggregates (columns containing ``roll`` or ``rolling``)
-
-Because the exact helper name is not part of the public API we discover it
-at runtime by looking for common nomenclature.  If the helper cannot be
-found the test *skips* rather than fails, to avoid blocking unrelated
-branches during early development.
+These covariates are *known for future timestamps*, so they feed both the
+historical context and the ``future_df`` of the batched Chronos-2 call. The
+tests lock in three properties the model relies on: the covariate set is stable,
+the cyclical encodings stay within the unit circle, and the builder is pure (it
+must not mutate the caller's frame, which is reused across airports).
 """
 
 from __future__ import annotations
 
-from typing import Callable, List
+import importlib
+import sys
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pytest
 
 
-# --------------------------------------------------------------------------- #
-#                    Locate the feature‑engineering helper                    #
-# --------------------------------------------------------------------------- #
-def _find_feature_helper() -> Callable[[pd.DataFrame], pd.DataFrame]:
-    # Ensure the repository root is on sys.path so that `project.app`
-    # (a namespace package living at `<repo_root>/project`) is importable.
-    from pathlib import Path
-    import sys
-
-    repo_root = Path(__file__).resolve().parents[2]  # `<repo_root>/autogluon`
+def _app():
+    repo_root = Path(__file__).resolve().parents[2]  # <repo>/autogluon
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
-
-    import importlib
-
-    try:
-        app = importlib.import_module("project.app")
-    except ModuleNotFoundError:
-        # Fallback for repository layout where 'project' lives inside 'autogluon/'
-        app = importlib.import_module("autogluon.project.app")
-
-    candidates: List[str] = [
-        # likely public helpers
-        "add_features",
-        "make_features",
-        "prepare_features",
-        "build_features",
-        # private helpers
-        "_add_features",
-        "_make_features",
-        "_prepare_features",
-        "_build_features",
-        "feature_engineering",
-        "_feature_engineering",
-    ]
-
-    for name in candidates:
-        if hasattr(app, name):
-            fn = getattr(app, name)
-            if callable(fn):
-                return fn
-
-    pytest.skip(
-        "No feature‑engineering helper found in `project.app`. "
-        "Skipping feature tests.",
-        allow_module_level=True,
-    )
+    return importlib.import_module("project.app")
 
 
-FEATURE_HELPER = _find_feature_helper()
+def _raw_df(periods=288):
+    """A 24h, 5-minute frame with the ``timestamp`` column the builder expects."""
+    ts = pd.date_range("2024-01-01", periods=periods, freq="5min")
+    return pd.DataFrame({"timestamp": ts, "queue": np.random.rand(periods)})
 
 
-# --------------------------------------------------------------------------- #
-#                          Synthetic minimal raw data                         #
-# --------------------------------------------------------------------------- #
-def _make_raw_df() -> pd.DataFrame:
-    """Create a 24‑hour, 5‑minute cadence DataFrame with a `queue` column."""
-    idx = pd.date_range("2024-01-01", periods=288, freq="5min")  # 24h * 12
-    df = pd.DataFrame({"queue": np.random.rand(len(idx))}, index=idx)
-    return df
+def test_time_covariates_add_columns_non_destructively():
+    app = _app()
+    raw = _raw_df()
+    out = app._add_time_covariates(raw)
 
-
-# --------------------------------------------------------------------------- #
-#                                   Tests                                     #
-# --------------------------------------------------------------------------- #
-def test_feature_helper_adds_columns():
-    """
-    The helper must *add* columns (non‑destructively) and preserve index
-    length.
-    """
-    raw = _make_raw_df()
-    expanded = FEATURE_HELPER(raw.copy())
-
-    # The helper may return a *view* of the original DF; ensure same length.
-    assert len(expanded) == len(raw)
-
-    # Must contain all original columns.
+    assert len(out) == len(raw)
     for col in raw.columns:
-        assert col in expanded.columns
+        assert col in out.columns
+    for expected in ("hour", "day_of_week", "is_weekend", "month",
+                     "tod_sin", "tod_cos", "tow_sin", "tow_cos", "doy_sin", "doy_cos"):
+        assert expected in out.columns
 
-    new_cols = set(expanded.columns) - set(raw.columns)
-    assert new_cols, "Expected the helper to add at least one new column"
 
+def test_cyclical_columns_within_unit_circle():
+    app = _app()
+    out = app._add_time_covariates(_raw_df())
 
-def test_trig_columns_within_unit_circle():
-    """
-    All sine / cosine features should be bounded by ±1.
-    """
-    expanded = FEATURE_HELPER(_make_raw_df())
-
-    trig_cols = [c for c in expanded.columns if c.endswith(("sin", "cos"))]
-    assert trig_cols, "No sine/cosine columns produced"
-
+    trig_cols = [c for c in out.columns if c.endswith(("sin", "cos"))]
+    assert trig_cols, "expected sine/cosine covariates"
     for col in trig_cols:
-        series = expanded[col].dropna()
-        assert (series.abs() <= 1.0000001).all(), f"{col} outside [−1,1] range"
+        series = out[col].dropna()
+        assert (series.abs() <= 1.0 + 1e-9).all(), f"{col} outside [-1, 1]"
 
 
-def test_rolling_features_have_few_nans():
-    """
-    Rolling aggregates inevitably introduce leading NaNs but the *majority*
-    of rows (≥ 75 %) should be finite.
-    """
-    expanded = FEATURE_HELPER(_make_raw_df())
+def test_calendar_columns_have_sane_ranges():
+    app = _app()
+    out = app._add_time_covariates(_raw_df())
 
-    roll_cols = [c for c in expanded.columns if "roll" in c.lower()]
-    if not roll_cols:
-        pytest.skip("No rolling feature columns present")
-
-    for col in roll_cols:
-        series = expanded[col]
-        fraction_valid = series.notna().mean()
-        assert (
-            fraction_valid >= 0.75
-        ), f"{col} has too many NaNs ({1-fraction_valid:.0%} empty)"
+    assert out["hour"].between(0, 23).all()
+    assert out["month"].between(1, 12).all()
+    assert set(out["is_weekend"].unique()) <= {0.0, 1.0}
+    assert out["day_of_week"].between(0, 6).all()
 
 
-def test_feature_helper_pure_function():
-    """
-    The raw DataFrame passed in should *not* be mutated in‑place.
-    """
-    raw = _make_raw_df()
+def test_builder_does_not_mutate_input():
+    app = _app()
+    raw = _raw_df()
     raw_copy = raw.copy(deep=True)
 
-    _ = FEATURE_HELPER(raw)
+    _ = app._add_time_covariates(raw)
 
-    pd.testing.assert_frame_equal(
-        raw, raw_copy, check_dtype=False
-    ), "Feature helper mutated its input in‑place"
+    pd.testing.assert_frame_equal(raw, raw_copy, check_dtype=False)

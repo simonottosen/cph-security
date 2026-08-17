@@ -86,6 +86,11 @@ RESAMPLE_FREQUENCY = os.environ.get("RESAMPLE_FREQUENCY", "5min")
 CONTEXT_DAYS = int(os.environ.get("CONTEXT_DAYS", "60"))
 MAX_FILL_GAP_STEPS = int(os.environ.get("MAX_FILL_GAP_STEPS", "6"))
 
+# How stale the end of the context may be before we decline to forecast at all.
+# The horizon is PREDICTION_LENGTH steps from the context end (96 x 5 min = 8 h),
+# so at 6 h roughly two usable hours remain -- which is what the site reports.
+MAX_CONTEXT_AGE_MINUTES = int(os.environ.get("MAX_CONTEXT_AGE_MINUTES", "360"))
+
 # Cross-series learning: forecast all airports jointly so the model shares
 # information across related series. Task-dependent, hence backtest-gated
 # (eval/backtest.py can toggle it with --chronos-no-cross-learning).
@@ -380,28 +385,43 @@ def _prepare_airport_context(df_raw, code):
     )
     stats["rows_missing_after_fill"] = int(df_code["queue"].isna().sum())
 
-    # Select the longest contiguous non-missing segment in the recent window.
+    # Select the most recent contiguous non-missing segment. It must be the most
+    # recent one rather than the longest: the forecast is anchored to the end of
+    # the context, so a longer but older segment yields a forecast for a window
+    # that has already elapsed -- which every consumer then discards, while the
+    # retrain still reports success.
     valid_mask = (~df_code["queue"].isna()).to_numpy()
-    best_start = best_end = -1
-    current_start = -1
-    for i, is_valid in enumerate(valid_mask):
-        if is_valid and current_start == -1:
-            current_start = i
-        if (not is_valid) and current_start != -1:
-            if (i - current_start) > (best_end - best_start):
-                best_start, best_end = current_start, i
-            current_start = -1
-    if current_start != -1 and (len(valid_mask) - current_start) > (best_end - best_start):
-        best_start, best_end = current_start, len(valid_mask)
+    seg_start = seg_end = -1
+    for i in range(len(valid_mask) - 1, -1, -1):
+        if valid_mask[i]:
+            if seg_end == -1:
+                seg_end = i + 1
+            seg_start = i
+        elif seg_end != -1:
+            break
 
-    if best_start == -1:
+    if seg_end == -1:
         stats["status"] = "no_contiguous_segment"
         stats["status_message"] = "No contiguous segment available after gap handling"
         return None, stats, None
 
-    df_code = df_code.iloc[best_start:best_end].copy()
+    df_code = df_code.iloc[seg_start:seg_end].copy()
     stats["selected_segment_start"] = df_code.index.min().isoformat()
     stats["selected_segment_end"] = df_code.index.max().isoformat()
+
+    # Refuse to forecast from a context that has already gone cold: the horizon
+    # is anchored to the context end, so most or all of it would lie in the past.
+    # Reporting no forecast is honest; emitting an elapsed one is not.
+    context_age = pd.Timestamp.now("UTC").tz_localize(None) - df_code.index.max()
+    stats["context_age_minutes"] = int(context_age.total_seconds() // 60)
+    if context_age > pd.Timedelta(minutes=MAX_CONTEXT_AGE_MINUTES):
+        stats["status"] = "stale_history"
+        stats["status_message"] = (
+            f"Most recent history ends {df_code.index.max().isoformat()}, "
+            f"{stats['context_age_minutes']} min ago (limit "
+            f"{MAX_CONTEXT_AGE_MINUTES}); refusing to forecast an elapsed window"
+        )
+        return None, stats, None
     df_code = df_code.reset_index()
     stats["context_rows"] = int(len(df_code))
 

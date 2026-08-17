@@ -184,6 +184,60 @@ def test_beats_last_value_when_chronos_available():
     assert np.std(means) > 1e-6
 
 
+def _raw_with_gap(code="CPH"):
+    """History split by an outage: a long old segment, a shorter recent one.
+
+    Mirrors real CPH data on 2026-08-17, where a 14 h outage left a 51-day
+    stretch ending 9 days ago alongside a 2.5-day stretch ending now.
+    """
+    now = pd.Timestamp.now("UTC").tz_localize(None).floor("5min")
+    old = pd.date_range(now - pd.Timedelta(days=20), now - pd.Timedelta(days=9), freq="5min")
+    recent = pd.date_range(now - pd.Timedelta(days=2), now, freq="5min")
+    idx = old.append(recent)
+    vals = 6.0 + 3.0 * np.sin(np.arange(len(idx)) / 40.0)
+    return pd.DataFrame({
+        "airport": code,
+        "timestamp": idx.astype(str),
+        "queue": np.maximum(0.0, vals),
+    }), old[-1], recent[-1]
+
+
+def test_context_anchors_to_most_recent_segment_not_longest():
+    """A longer but older segment must not win: it forecasts an elapsed window."""
+    df_raw, old_end, recent_end = _raw_with_gap("CPH")
+    ctx, stats, _ = app._prepare_airport_context(df_raw, "CPH")
+
+    assert ctx is not None, f"expected a usable context, got status={stats['status']}"
+    assert stats["status"] == "ok"
+
+    selected_end = pd.Timestamp(stats["selected_segment_end"])
+    assert selected_end == recent_end, (
+        f"anchored to {selected_end}, expected the recent segment end {recent_end}"
+    )
+    # The regression being locked in: the old segment is far longer.
+    assert selected_end > old_end
+    assert ctx["timestamp"].max() == recent_end
+
+
+def test_stale_history_is_refused_rather_than_forecast_into_the_past():
+    """Context older than MAX_CONTEXT_AGE_MINUTES yields a status, not a forecast."""
+    now = pd.Timestamp.now("UTC").tz_localize(None).floor("5min")
+    # One segment only, ending well beyond the staleness limit.
+    end = now - pd.Timedelta(minutes=app.MAX_CONTEXT_AGE_MINUTES + 120)
+    idx = pd.date_range(end - pd.Timedelta(days=5), end, freq="5min")
+    vals = 6.0 + 3.0 * np.sin(np.arange(len(idx)) / 40.0)
+    df_raw = pd.DataFrame({
+        "airport": "CPH",
+        "timestamp": idx.astype(str),
+        "queue": np.maximum(0.0, vals),
+    })
+
+    ctx, stats, _ = app._prepare_airport_context(df_raw, "CPH")
+    assert ctx is None, "a cold context must not produce a forecast"
+    assert stats["status"] == "stale_history"
+    assert stats["context_age_minutes"] >= app.MAX_CONTEXT_AGE_MINUTES
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):

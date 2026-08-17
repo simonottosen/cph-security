@@ -210,13 +210,15 @@ def test_context_anchors_to_most_recent_segment_not_longest():
     assert ctx is not None, f"expected a usable context, got status={stats['status']}"
     assert stats["status"] == "ok"
 
+    # Compare on the resample grid: the raw samples are floored into it.
+    expected_end = recent_end.floor(app.RESAMPLE_FREQUENCY)
     selected_end = pd.Timestamp(stats["selected_segment_end"])
-    assert selected_end == recent_end, (
-        f"anchored to {selected_end}, expected the recent segment end {recent_end}"
+    assert selected_end == expected_end, (
+        f"anchored to {selected_end}, expected the recent segment end {expected_end}"
     )
     # The regression being locked in: the old segment is far longer.
     assert selected_end > old_end
-    assert ctx["timestamp"].max() == recent_end
+    assert ctx["timestamp"].max() == expected_end
 
 
 def test_stale_history_is_refused_rather_than_forecast_into_the_past():
@@ -236,6 +238,145 @@ def test_stale_history_is_refused_rather_than_forecast_into_the_past():
     assert ctx is None, "a cold context must not produce a forecast"
     assert stats["status"] == "stale_history"
     assert stats["context_age_minutes"] >= app.MAX_CONTEXT_AGE_MINUTES
+
+
+def _diurnal_raw(code="CPH", days=20, gap=None, freq=None):
+    """A strongly diurnal series, optionally with a hole punched in it.
+
+    Returns ``(raw_frame, truth_series)`` so a test can compare a reconstruction
+    against the values that were withheld.
+    """
+    freq = freq or app.RESAMPLE_FREQUENCY
+    now = pd.Timestamp.now("UTC").tz_localize(None).floor(freq)
+    idx = pd.date_range(now - pd.Timedelta(days=days), now, freq=freq, name="timestamp")
+    minute_of_day = idx.hour * 60 + idx.minute
+    truth = pd.Series(12.0 + 9.0 * np.sin(2 * np.pi * minute_of_day / 1440.0), index=idx)
+
+    keep = pd.Series(True, index=idx)
+    if gap is not None:
+        keep.loc[gap[0]:gap[1]] = False
+    observed = truth[keep]
+    raw = pd.DataFrame({
+        "airport": code,
+        "timestamp": observed.index.astype(str),
+        "queue": observed.to_numpy(),
+    })
+    return raw, truth
+
+
+def test_long_gap_is_bridged_and_keeps_the_daily_shape():
+    """A multi-hour outage must not truncate the context nor flatten the cycle.
+
+    The old behaviour discarded every observation before an unbridged gap, which
+    turned 60 days of history into 2.6 usable days. Linear interpolation would
+    keep the rows but replace a whole night-and-morning cycle with a ramp.
+    """
+    now = pd.Timestamp.now("UTC").tz_localize(None).floor(app.RESAMPLE_FREQUENCY)
+    step = pd.Timedelta(app.RESAMPLE_FREQUENCY)
+    gap_start = (now - pd.Timedelta(days=5)).floor("h")
+    gap_end = gap_start + pd.Timedelta(hours=12)
+    raw, truth = _diurnal_raw(gap=(gap_start, gap_end))
+
+    ctx, stats, _ = app._prepare_airport_context(raw, "CPH")
+    assert ctx is not None, f"gap should be bridged, got status={stats['status']}"
+    assert stats["status"] == "ok"
+
+    # The whole span survives: one segment, not a post-gap remnant.
+    assert pd.Timestamp(stats["selected_segment_start"]) == truth.index.min()
+    assert pd.Timestamp(stats["selected_segment_end"]) == truth.index.max()
+    # The hole spans gap_start..gap_end inclusive; its anchors sit one step outside.
+    hole = truth.loc[gap_start:gap_end].index
+    assert stats["rows_seasonally_filled"] == len(hole)
+    assert stats["longest_gap_filled_steps"] == len(hole)
+
+    filled = ctx.set_index("timestamp")["queue"]
+    inside = filled.loc[hole]
+    actual = truth.loc[hole]
+
+    # A straight line between the surviving observations either side of the hole:
+    # what plain interpolation would have produced.
+    left, right = gap_start - step, gap_end + step
+    linear = pd.Series(
+        np.linspace(truth.loc[left], truth.loc[right], len(hole) + 2)[1:-1],
+        index=hole,
+    )
+    seasonal_rmse = float(np.sqrt(((inside - actual) ** 2).mean()))
+    linear_rmse = float(np.sqrt(((linear - actual) ** 2).mean()))
+    assert seasonal_rmse < linear_rmse / 2, (
+        f"seasonal fill rmse {seasonal_rmse:.3f} should clearly beat linear {linear_rmse:.3f}"
+    )
+    # The reconstruction spans a real daily swing rather than sitting flat.
+    assert inside.max() - inside.min() > 0.5 * (actual.max() - actual.min())
+
+
+def test_gap_longer_than_the_limit_still_splits_the_series():
+    """We reconstruct outages, not multi-day silence."""
+    now = pd.Timestamp.now("UTC").tz_localize(None).floor(app.RESAMPLE_FREQUENCY)
+    step = pd.Timedelta(app.RESAMPLE_FREQUENCY)
+    over_limit = step * (app.MAX_FILL_GAP_STEPS + 10)
+    gap_end = now - pd.Timedelta(days=3)
+    raw, _ = _diurnal_raw(days=30, gap=(gap_end - over_limit, gap_end))
+
+    ctx, stats, _ = app._prepare_airport_context(raw, "CPH")
+    assert ctx is not None
+    # Context begins after the gap, so the unbridgeable hole cost us the earlier data.
+    assert pd.Timestamp(stats["selected_segment_start"]) >= gap_end
+    assert stats["rows_missing_after_fill"] > 0
+
+
+def test_fill_never_extrapolates_past_the_observations():
+    """Leading and trailing holes have no anchor, so they must stay missing."""
+    _, truth = _diurnal_raw(days=10)
+    series = truth.copy()
+    series.iloc[:5] = np.nan
+    series.iloc[-5:] = np.nan
+    cov = app._build_historical_covariate_tables(truth.to_frame("queue"))
+
+    filled, rows_filled, _ = app._seasonal_fill(series, cov, app.MAX_FILL_GAP_STEPS)
+    assert rows_filled == 0
+    assert filled.iloc[:5].isna().all()
+    assert filled.iloc[-5:].isna().all()
+
+
+def test_reconstruction_is_never_negative():
+    """A downward drift must not invent a negative queue length."""
+    _, truth = _diurnal_raw(days=10)
+    series = truth.copy()
+    # Bracket a low-season hole with near-zero observations so the residual drift
+    # pulls the seasonal profile below zero.
+    hole = slice(100, 100 + min(20, app.MAX_FILL_GAP_STEPS))
+    series.iloc[hole] = np.nan
+    series.iloc[hole.start - 1] = 0.0
+    series.iloc[hole.stop] = 0.0
+    cov = app._build_historical_covariate_tables(truth.to_frame("queue"))
+
+    filled, rows_filled, _ = app._seasonal_fill(series, cov, app.MAX_FILL_GAP_STEPS)
+    assert rows_filled > 0
+    assert (filled.dropna() >= 0).all(), f"negative values: {filled[filled < 0].tolist()}"
+
+
+def test_negative_sentinel_readings_are_treated_as_missing():
+    """LHR reports -1 overnight for 'no reading'; -1 minutes is not a queue."""
+    raw, truth = _diurnal_raw(days=10)
+    sentinel_at = raw.index[len(raw) // 2]
+    raw.loc[sentinel_at, "queue"] = -1
+
+    ctx, stats, _ = app._prepare_airport_context(raw, "CPH")
+    assert ctx is not None
+    assert stats["negative_sentinel_rows"] == 1
+    assert (ctx["queue"] >= 0).all()
+    # It became a one-step hole that the fill bridged, not a real -1 observation.
+    assert -1 not in ctx["queue"].to_numpy()
+
+
+def test_default_horizon_stays_eight_hours():
+    """Guard the coupling between grid and horizon.
+
+    PREDICTION_LENGTH counts steps, so changing RESAMPLE_FREQUENCY alone silently
+    rescales the published forecast window.
+    """
+    horizon = pd.Timedelta(app.RESAMPLE_FREQUENCY) * app.PREDICTION_LENGTH
+    assert horizon == pd.Timedelta(hours=8), f"horizon drifted to {horizon}"
 
 
 if __name__ == "__main__":

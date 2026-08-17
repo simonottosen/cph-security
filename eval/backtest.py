@@ -278,7 +278,12 @@ class Chronos2Predictor(Predictor):
         if fc is None or fc.empty:
             return pd.DataFrame({"mean": np.nan}, index=target_idx)
         indexed = fc.set_index("timestamp")
-        near = indexed.reindex(target_idx, method="nearest", tolerance=pd.Timedelta(minutes=5))
+        # Match the forecast's own grid rather than a hard-coded 5 minutes: the
+        # service emits 15-minute steps while targets are evaluated at 5, and a
+        # fixed tolerance would silently score unmatched targets as missing data
+        # the moment the two grids stopped lining up.
+        tolerance = pd.Timedelta(getattr(self._mod, "RESAMPLE_FREQUENCY", "5min")) / 2
+        near = indexed.reindex(target_idx, method="nearest", tolerance=tolerance)
         out = pd.DataFrame(index=target_idx)
         out["mean"] = near["mean"].to_numpy() if "mean" in near else np.nan
         for q in (0.1, 0.5, 0.9):

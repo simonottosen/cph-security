@@ -81,13 +81,25 @@ CHRONOS2_MODEL_ID = os.environ.get("CHRONOS2_MODEL_ID", "amazon/chronos-2")
 CHRONOS2_DEVICE_MAP = os.environ.get("CHRONOS2_DEVICE_MAP")
 if CHRONOS2_DEVICE_MAP is None:
     CHRONOS2_DEVICE_MAP = _detect_default_device_map()
-PREDICTION_LENGTH = int(os.environ.get("PREDICTION_LENGTH", "96"))
-RESAMPLE_FREQUENCY = os.environ.get("RESAMPLE_FREQUENCY", "5min")
+# 15 min rather than 5 min. The scrapers do not reliably deliver a sample every
+# 5 minutes, so a 5-minute grid was only 81% populated and the resulting gaps
+# fragmented the context; at 15 minutes raw coverage is 98.7%. 32 steps keeps the
+# published horizon at 8 h. Changing RESAMPLE_FREQUENCY without also changing
+# PREDICTION_LENGTH silently rescales the horizon.
+PREDICTION_LENGTH = int(os.environ.get("PREDICTION_LENGTH", "32"))
+RESAMPLE_FREQUENCY = os.environ.get("RESAMPLE_FREQUENCY", "15min")
 CONTEXT_DAYS = int(os.environ.get("CONTEXT_DAYS", "60"))
-MAX_FILL_GAP_STEPS = int(os.environ.get("MAX_FILL_GAP_STEPS", "6"))
+
+# Longest interior gap we are willing to bridge, in grid steps (64 x 15 min = 16 h).
+# Measured against real history: the 60-day window contains a handful of scraper
+# outages, the largest 13 h, and a single unbridged gap truncates the context to
+# whatever follows it -- which is how 60 days of history became 2.6 usable days.
+# Gaps longer than this are left as holes and still split the series, because a
+# multi-day outage carries no information worth reconstructing.
+MAX_FILL_GAP_STEPS = int(os.environ.get("MAX_FILL_GAP_STEPS", "64"))
 
 # How stale the end of the context may be before we decline to forecast at all.
-# The horizon is PREDICTION_LENGTH steps from the context end (96 x 5 min = 8 h),
+# The horizon is PREDICTION_LENGTH steps from the context end (32 x 15 min = 8 h),
 # so at 6 h roughly two usable hours remain -- which is what the site reports.
 MAX_CONTEXT_AGE_MINUTES = int(os.environ.get("MAX_CONTEXT_AGE_MINUTES", "360"))
 
@@ -217,6 +229,92 @@ def _build_historical_covariate_tables(history_df):
     }
 
 
+def _profile_for_index(index, cov_tables):
+    """Seasonal expectation (day-of-week x time-of-day) for each timestamp."""
+    ts = pd.Series(pd.to_datetime(index))
+    keys_dow_hm = pd.MultiIndex.from_arrays(
+        [ts.dt.dayofweek.to_numpy(), ts.dt.hour.to_numpy(), ts.dt.minute.to_numpy()],
+        names=["day_of_week", "hour", "minute"],
+    )
+    keys_hm = pd.MultiIndex.from_arrays(
+        [ts.dt.hour.to_numpy(), ts.dt.minute.to_numpy()],
+        names=["hour", "minute"],
+    )
+    profile = cov_tables["profile_dow_hm"].reindex(keys_dow_hm).to_numpy(dtype=float)
+    fallback = cov_tables["profile_hm"].reindex(keys_hm).to_numpy(dtype=float)
+    profile = np.where(np.isnan(profile), fallback, profile)
+    profile = np.where(np.isnan(profile), cov_tables["global_mean"], profile)
+    return pd.Series(profile, index=index)
+
+
+def _nan_runs(mask):
+    """Start/stop index pairs of each consecutive True run in a boolean array."""
+    runs, start = [], -1
+    for i, flag in enumerate(mask):
+        if flag and start == -1:
+            start = i
+        elif not flag and start != -1:
+            runs.append((start, i))
+            start = -1
+    if start != -1:
+        runs.append((start, len(mask)))
+    return runs
+
+
+def _seasonal_fill(series, cov_tables, max_gap_steps):
+    """Bridge interior gaps with the seasonal profile plus a drifting offset.
+
+    Plain linear interpolation is fine over a few missing samples but destroys
+    the signal over long ones: a straight line across a 13 h scraper outage
+    flattens an entire night-and-morning cycle into a ramp, and the model reads
+    that fabrication as real. Instead we interpolate the *residual* (observed
+    minus seasonal profile) and add the profile back, which reproduces the usual
+    daily shape while still matching the observed values at both gap edges. For
+    short gaps the profile is nearly constant, so this degrades to the linear
+    behaviour it replaces.
+
+    Only interior gaps of at most ``max_gap_steps`` are bridged. Leading and
+    trailing gaps are never extrapolated, and longer gaps stay NaN so they still
+    split the series. Returns ``(filled_series, rows_filled, longest_gap_filled)``.
+    """
+    filled = series.copy()
+    isna = series.isna().to_numpy()
+    if not isna.any():
+        return filled, 0, 0
+
+    profile = _profile_for_index(series.index, cov_tables)
+    residual = series - profile
+    values = filled.to_numpy(dtype=float)
+    residual_values = residual.to_numpy(dtype=float)
+    profile_values = profile.to_numpy(dtype=float)
+
+    rows_filled = 0
+    longest = 0
+    for start, stop in _nan_runs(isna):
+        # Interior only: an edge gap has no anchor on one side, so bridging it
+        # would be extrapolation.
+        if start == 0 or stop == len(values):
+            continue
+        if (stop - start) > max_gap_steps:
+            continue
+
+        left_residual = residual_values[start - 1]
+        right_residual = residual_values[stop]
+        span = stop - start + 1
+        for offset, i in enumerate(range(start, stop), start=1):
+            weight = offset / span
+            drift = left_residual + (right_residual - left_residual) * weight
+            # A downward drift can push a low-season slot below zero; a queue
+            # cannot be negative, and feeding one to the model invents a value no
+            # observation could ever take.
+            values[i] = max(0.0, profile_values[i] + drift)
+
+        rows_filled += stop - start
+        longest = max(longest, stop - start)
+
+    return pd.Series(values, index=series.index, name=series.name), rows_filled, longest
+
+
 def _add_history_queue_covariates(df, cov_tables, timestamp_col="timestamp"):
     """Add lag/profile covariates from historical queue values."""
     out = df.copy()
@@ -304,12 +402,17 @@ def _prepare_airport_context(df_raw, code):
     stats = {
         "raw_rows": int(len(df_code)),
         "valid_rows": 0,
+        "negative_sentinel_rows": 0,
         "rows_needing_fill": 0,
         "rows_not_needing_fill": 0,
         "rows_ffilled": 0,
         "rows_not_ffilled": 0,
+        "rows_seasonally_filled": 0,
+        "longest_gap_filled_steps": 0,
         "rows_missing_after_fill": 0,
         "context_rows": 0,
+        "context_synthetic_ratio": 0.0,
+        "context_age_minutes": None,
         "window_days": CONTEXT_DAYS,
         "window_start": None,
         "window_end": None,
@@ -329,6 +432,13 @@ def _prepare_airport_context(df_raw, code):
 
     df_code["timestamp"] = pd.to_datetime(df_code["timestamp"], utc=True).dt.tz_convert(None)
     df_code["queue"] = pd.to_numeric(df_code["queue"], errors="coerce")
+    # Upstream feeds use -1 as a "closed / no reading" sentinel (LHR does this
+    # overnight). Stored as-is it becomes a queue of minus one minute, which drags
+    # the seasonal profile for those slots below zero. It means "unknown", so drop
+    # it and let the gap machinery deal with it.
+    negative_sentinels = int((df_code["queue"] < 0).sum())
+    df_code.loc[df_code["queue"] < 0, "queue"] = np.nan
+    stats["negative_sentinel_rows"] = negative_sentinels
     df_code = df_code.dropna(subset=["timestamp", "queue"])
     stats["valid_rows"] = int(len(df_code))
     if df_code.empty:
@@ -377,12 +487,14 @@ def _prepare_airport_context(df_raw, code):
     if len(df_code) > 0:
         stats["window_coverage_ratio"] = float(stats["rows_not_needing_fill"] / len(df_code))
 
-    # Fill only short gaps; avoid flattening long gaps into stale plateaus.
-    df_code["queue"] = df_code["queue"].interpolate(
-        method="time",
-        limit=MAX_FILL_GAP_STEPS,
-        limit_direction="both",
+    # Bridge gaps up to MAX_FILL_GAP_STEPS using the seasonal profile, so an
+    # outage costs us its own duration rather than every observation before it.
+    was_missing = df_code["queue"].isna().to_numpy()
+    df_code["queue"], rows_filled, longest_gap = _seasonal_fill(
+        df_code["queue"], cov_tables, MAX_FILL_GAP_STEPS
     )
+    stats["rows_seasonally_filled"] = rows_filled
+    stats["longest_gap_filled_steps"] = longest_gap
     stats["rows_missing_after_fill"] = int(df_code["queue"].isna().sum())
 
     # Select the most recent contiguous non-missing segment. It must be the most
@@ -408,6 +520,13 @@ def _prepare_airport_context(df_raw, code):
     df_code = df_code.iloc[seg_start:seg_end].copy()
     stats["selected_segment_start"] = df_code.index.min().isoformat()
     stats["selected_segment_end"] = df_code.index.max().isoformat()
+
+    # What share of the context we reconstructed rather than observed. Exposed so
+    # a degrading scraper shows up as rising synthetic content instead of quietly
+    # turning the forecast into a replay of the seasonal profile.
+    segment_missing = was_missing[seg_start:seg_end]
+    if len(segment_missing) > 0:
+        stats["context_synthetic_ratio"] = float(segment_missing.mean())
 
     # Refuse to forecast from a context that has already gone cold: the horizon
     # is anchored to the context end, so most or all of it would lie in the past.

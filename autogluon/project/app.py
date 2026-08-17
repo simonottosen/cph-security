@@ -103,6 +103,11 @@ MAX_FILL_GAP_STEPS = int(os.environ.get("MAX_FILL_GAP_STEPS", "64"))
 # so at 6 h roughly two usable hours remain -- which is what the site reports.
 MAX_CONTEXT_AGE_MINUTES = int(os.environ.get("MAX_CONTEXT_AGE_MINUTES", "360"))
 
+# How much future coverage a served forecast must still have for /health to call
+# itself ok. Below this the horizon has essentially elapsed and consumers will
+# render nothing, so the service should report unhealthy rather than "ok".
+MIN_FUTURE_HORIZON_MINUTES = int(os.environ.get("MIN_FUTURE_HORIZON_MINUTES", "30"))
+
 # Cross-series learning: forecast all airports jointly so the model shares
 # information across related series. Task-dependent, hence backtest-gated
 # (eval/backtest.py can toggle it with --chronos-no-cross-learning).
@@ -861,6 +866,55 @@ def get_forecast(airport):
     return jsonify({'predictions': preds})
 
 
+def _forecast_freshness(now=None):
+    """Per-airport freshness of what we are currently serving.
+
+    ``/health`` used to answer ``{"status": "ok"}`` unconditionally, reporting only
+    how many airports were loaded -- never whether those forecasts were for the
+    future. That is precisely how the service spent a week serving an elapsed
+    window while logging "10/10 airports forecast" every hour: the frontend
+    correctly discarded every point, and nothing anywhere went red.
+    """
+    now = now or pd.Timestamp.now("UTC").tz_localize(None)
+
+    with _state_lock:
+        preds = dict(df_preds)
+        metrics = dict(train_metrics)
+
+    airports, usable = {}, 0
+    for code in VALID_AIRPORTS:
+        recs = preds.get(code) or []
+        record = {
+            "has_forecast": False,
+            "horizon_remaining_minutes": None,
+            "status": (metrics.get(code) or {}).get("status"),
+            "context_age_minutes": (metrics.get(code) or {}).get("context_age_minutes"),
+            "context_synthetic_ratio": (metrics.get(code) or {}).get("context_synthetic_ratio"),
+        }
+        # Status placeholders carry no "mean", which is also how consumers tell
+        # them apart from a real forecast.
+        points = [r for r in recs if isinstance(r, dict) and r.get("mean") is not None]
+        if points:
+            last = pd.Timestamp(max(r["timestamp"] for r in points))
+            remaining = (last - now).total_seconds() / 60.0
+            record["has_forecast"] = True
+            record["horizon_remaining_minutes"] = int(remaining)
+            if remaining >= MIN_FUTURE_HORIZON_MINUTES:
+                usable += 1
+        airports[code] = record
+
+    return {
+        # Serving nothing usable is the failure worth restarting for. A single
+        # dead feed (EDI has sent nothing since 2025-11-21) must not flap the
+        # container, so this deliberately does not require every airport.
+        "status": "ok" if usable else "stale",
+        "airports_usable": usable,
+        "airports_loaded": len(preds),
+        "min_future_horizon_minutes": MIN_FUTURE_HORIZON_MINUTES,
+        "airports": airports,
+    }
+
+
 @app.route('/metrics', methods=['GET'])
 def get_metrics():
     """Return latest forecasting metrics."""
@@ -870,16 +924,18 @@ def get_metrics():
 
 @app.route('/health', methods=['GET'])
 def health():
-    with _state_lock:
-        n = len(df_preds)
-    return jsonify({
-        "status": "ok",
-        "airports_loaded": n,
+    freshness = _forecast_freshness()
+    payload = {
         "chronos_available": BaseChronosPipeline is not None,
         "cross_learning": CROSS_LEARNING,
         "prediction_length": PREDICTION_LENGTH,
+        "resample_frequency": RESAMPLE_FREQUENCY,
         "quantile_levels": QUANTILE_LEVELS,
-    })
+    }
+    payload.update(freshness)
+    # 503 so a container healthcheck or load balancer can act on it, instead of
+    # the only symptom being an empty graph on the website.
+    return jsonify(payload), (200 if freshness["status"] == "ok" else 503)
 
 
 if __name__ == '__main__':

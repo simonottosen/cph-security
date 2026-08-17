@@ -201,6 +201,19 @@ services:
     volumes:
       - autogluon_forecasts:/forecasts
     restart: unless-stopped
+    # /health returns 503 once the served horizon has elapsed, which is the
+    # failure that previously showed up only as a missing graph on the site.
+    # No image-level HTTP client here (python:3.12-slim), so urllib does it;
+    # urlopen raises on 503, which is the non-zero exit Docker looks for.
+    # start_period is generous: a cold start downloads Chronos-2 before the first
+    # forecast exists. Deliberately not a `depends_on` gate for anything -- the
+    # forecast is a non-critical enhancement and must not hold back the API.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=10)"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 600s
 
 volumes:
   # Shared model artifact written by the trainer and read by the serving app.

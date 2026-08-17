@@ -133,13 +133,26 @@ def test_forecast_persistence_round_trip():
     assert "generated_at" in loaded
 
 
+def _seed_forecast(code="CPH", ends_in_minutes=240):
+    """Point ``df_preds`` at a single forecast ending the given distance from now."""
+    ts = pd.Timestamp.now("UTC").tz_localize(None) + pd.Timedelta(minutes=ends_in_minutes)
+    with app._state_lock:
+        app.df_preds.clear()
+        app.train_metrics.clear()
+        app.df_preds[code] = [{
+            "timestamp": ts.strftime("%Y-%m-%dT%H:%M:%S"),
+            "mean": 5.0,
+            "q30": 4.0,
+            "q70": 6.0,
+        }]
+        app.train_metrics[code] = {"total_time_seconds": 1.2, "status": "ok"}
+
+
 def test_flask_endpoints():
     client = app.app.test_client()
 
     # Seed state directly (retrain rebinds these globals atomically at runtime).
-    with app._state_lock:
-        app.df_preds["CPH"] = [{"timestamp": "2026-06-01T00:00:00", "mean": 5.0, "q30": 4.0, "q70": 6.0}]
-        app.train_metrics["CPH"] = {"total_time_seconds": 1.2}
+    _seed_forecast("CPH", ends_in_minutes=240)
 
     ok = client.get("/forecast/cph")
     assert ok.status_code == 200
@@ -158,6 +171,47 @@ def test_flask_endpoints():
     body = h.get_json()
     assert body["status"] == "ok"
     assert body["cross_learning"] == app.CROSS_LEARNING
+    assert body["airports_usable"] == 1
+    assert body["airports"]["CPH"]["has_forecast"] is True
+
+
+def test_health_reports_unhealthy_when_the_horizon_has_elapsed():
+    """The regression that went unnoticed for a week: serving an elapsed window.
+
+    /health answered "ok" purely because forecasts were loaded, so an entirely
+    past horizon looked healthy while every consumer discarded it.
+    """
+    client = app.app.test_client()
+    _seed_forecast("CPH", ends_in_minutes=-120)
+
+    h = client.get("/health")
+    assert h.status_code == 503, "an elapsed horizon must not report healthy"
+    body = h.get_json()
+    assert body["status"] == "stale"
+    assert body["airports_usable"] == 0
+    # Still loaded, which is exactly why counting them proved nothing.
+    assert body["airports_loaded"] == 1
+    assert body["airports"]["CPH"]["horizon_remaining_minutes"] < 0
+
+    # And it recovers once a fresh forecast lands.
+    _seed_forecast("CPH", ends_in_minutes=240)
+    assert client.get("/health").status_code == 200
+
+
+def test_health_tolerates_a_single_dead_feed():
+    """One airport with no data must not mark the whole service unhealthy."""
+    client = app.app.test_client()
+    _seed_forecast("CPH", ends_in_minutes=240)
+    with app._state_lock:
+        # EDI has produced nothing since 2025-11-21; it reports a status, not a mean.
+        app.df_preds["EDI"] = [{"timestamp": "2026-01-01T00:00:00", "message": "EDI: no rows"}]
+        app.train_metrics["EDI"] = {"status": "no_rows"}
+
+    h = client.get("/health")
+    assert h.status_code == 200
+    body = h.get_json()
+    assert body["airports"]["EDI"]["has_forecast"] is False
+    assert body["airports"]["EDI"]["status"] == "no_rows"
 
 
 def test_quantiles_are_non_decreasing_per_timestamp():

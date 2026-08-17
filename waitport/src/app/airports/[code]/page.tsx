@@ -207,14 +207,23 @@ useEffect(() => {
     loadForecast();
   }, [code]);
 
-  // Derive predicted average over the next two hours (first 8 forecast points = 2 h)
+  // Derive the predicted average over the next two hours.
+  //
+  // Select by timestamp rather than by point count. A fixed `slice(0, 8)`
+  // silently assumed the service emitted 15-minute steps; on the 5-minute grid
+  // it averaged the next 40 minutes while the label promised two hours.
   useEffect(() => {
     if (!forecastData.length) {
       setAvgNextTwoHours(null);
       return;
     }
-    const window = forecastData.slice(0, 8); // 8 × 15‑min = 2 h
-    const avg = window.reduce((sum, p) => sum + p.mean, 0) / window.length;
+    const cutoff = Date.now() + 2 * 60 * 60 * 1000;
+    // fetchForecast returns future-only points sorted ascending, so this is a
+    // prefix. Keep the first point if the horizon starts past the cutoff, so a
+    // sparse forecast still reports a number instead of NaN.
+    const withinWindow = forecastData.filter((p) => p.time.getTime() <= cutoff);
+    const points = withinWindow.length ? withinWindow : forecastData.slice(0, 1);
+    const avg = points.reduce((sum, p) => sum + p.mean, 0) / points.length;
     setAvgNextTwoHours(Math.round(Math.max(0, avg)));
   }, [forecastData]);
 

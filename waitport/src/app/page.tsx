@@ -38,6 +38,10 @@ const airportNames: Record<AirportCode, string> = {
   dub: '🇮🇪 Dublin Airport',
   ist: '🇹🇷 Istanbul Airport',
 };
+
+/** How far ahead the front-page sparkline extends. */
+const SPARKLINE_HORIZON_MS = 2 * 60 * 60 * 1000;
+
 /* ------------------------------------------------------------------ */
 /* Small sparkline shown on the front page for each airport           */
 /* ------------------------------------------------------------------ */
@@ -96,14 +100,20 @@ const AirportSparkline: React.FC<{ code: AirportCode }> = ({ code }) => {
 
   useEffect(() => {
     fetchForecast(code)
-      .then((points) =>
+      .then((points) => {
+        // Show a fixed two hours ahead. Slicing a fixed number of points instead
+        // would tie the sparkline's span to the service's grid spacing, so the
+        // chart would quietly rescale whenever that changed.
+        const cutoff = Date.now() + SPARKLINE_HORIZON_MS;
         setForecastData(
-          points.slice(0, 8).map((p) => ({
-            time: p.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            Prediction: p.mean,
-          })),
-        ),
-      )
+          points
+            .filter((p) => p.time.getTime() <= cutoff)
+            .map((p) => ({
+              time: p.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              Prediction: p.mean,
+            })),
+        );
+      })
       .catch(() => setForecastData([]));
   }, [code]);
 

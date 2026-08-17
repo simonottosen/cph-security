@@ -8,6 +8,7 @@ forecast persistence, and the Flask endpoints. They run against the naive
 fallback pipeline, so they pass without torch/chronos installed. Real
 forecast-quality gating lives in eval/backtest.py (the accuracy harness).
 """
+import contextlib
 import os
 import sys
 import tempfile
@@ -407,6 +408,43 @@ def test_reconstruction_is_never_negative():
     filled, rows_filled, _ = app._seasonal_fill(series, cov, app.MAX_FILL_GAP_STEPS)
     assert rows_filled > 0
     assert (filled.dropna() >= 0).all(), f"negative values: {filled[filled < 0].tolist()}"
+
+
+def _copy_on_write():
+    """Force pandas' copy-on-write semantics, which are unconditional from pandas 3.
+
+    pandas 3 removed the toggle, so asking for it there raises; that version already
+    behaves this way, hence the no-op fallback.
+    """
+    try:
+        with pd.option_context("mode.copy_on_write", True):
+            pass
+    except Exception:
+        return contextlib.nullcontext()
+    return pd.option_context("mode.copy_on_write", True)
+
+
+def test_fill_works_under_copy_on_write():
+    """Regression: the fill must not try to mutate a copy-on-write view.
+
+    Under CoW, ``Series.to_numpy()`` hands back a read-only view when the dtype
+    already matches, so writing to it raises ValueError -- which broke every airport
+    that had any gap at all. It passed locally on pandas 2 and failed in CI on
+    pandas 3, so force the strict semantics here rather than inheriting whichever
+    version happens to be installed.
+    """
+    _, truth = _diurnal_raw(days=10)
+    cov = app._build_historical_covariate_tables(truth.to_frame("queue"))
+
+    with _copy_on_write():
+        series = truth.copy()
+        series.iloc[100:110] = np.nan
+        filled, rows_filled, _ = app._seasonal_fill(series, cov, app.MAX_FILL_GAP_STEPS)
+
+    assert rows_filled == 10
+    assert filled.notna().all()
+    # The input must be left exactly as it was found.
+    assert series.iloc[100:110].isna().all()
 
 
 def test_negative_sentinel_readings_are_treated_as_missing():

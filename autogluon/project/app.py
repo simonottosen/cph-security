@@ -289,7 +289,10 @@ def _seasonal_fill(series, cov_tables, max_gap_steps):
 
     profile = _profile_for_index(series.index, cov_tables)
     residual = series - profile
-    values = filled.to_numpy(dtype=float)
+    # np.array, not to_numpy(): under copy-on-write pandas hands back a read-only
+    # view of the Series' own buffer when the dtype already matches, and writing to
+    # it raises. This is the only array below that gets mutated.
+    values = np.array(filled, dtype=float)
     residual_values = residual.to_numpy(dtype=float)
     profile_values = profile.to_numpy(dtype=float)
 

@@ -31,6 +31,9 @@ def test_project_app_main_starts_quickly():
         requests = types.ModuleType("requests")
 
         class _Resp:
+            # Content-Range mirrors the real response: _load_raw reads it to detect a
+            # server-side row cap, and "1 of 1" means nothing was truncated.
+            headers = {"Content-Range": "0-0/1"}
             def raise_for_status(self): pass
             def json(self):
                 return [{"timestamp": "2024-01-01T00:00:00", "airport": "CPH", "queue": 1}]

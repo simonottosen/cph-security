@@ -122,6 +122,23 @@ FORECAST_DIR = os.environ.get("FORECAST_DIR", os.environ.get("MODELS_DIR", "fore
 
 FETCH_TIMEOUT = int(os.environ.get("FETCH_TIMEOUT", "60"))
 
+# The only columns the forecaster reads. Everything else the API returns (today
+# just the row id) is downloaded, parsed and dropped.
+RAW_COLUMNS = ("airport", "timestamp", "queue")
+
+# Longest lag looked up as a covariate, in days -- see queue_lag_365d in
+# _add_history_queue_covariates. History shorter than this makes the lag resolve to
+# nothing and silently fall back to the seasonal profile for every row.
+MAX_COVARIATE_LAG_DAYS = 365
+
+# How much history to ask the API for. Derived from its two consumers -- the context
+# window and the longest lag -- rather than hard-coded, so raising CONTEXT_DAYS
+# cannot quietly outrun the fetch and degrade the lag covariates instead of erroring.
+# The extra week absorbs clock skew and late-arriving rows.
+HISTORY_DAYS = int(os.environ.get(
+    "HISTORY_DAYS", str(CONTEXT_DAYS + MAX_COVARIATE_LAG_DAYS + 7)
+))
+
 # 21-level quantile grid (was 9). Deciles keep 1-decimal public API keys
 # ("0.1".."0.9") for backward compatibility; finer levels use their shortest
 # string form ("0.05", "0.15", ...). See _api_quantile_key.
@@ -663,11 +680,62 @@ def _prep_only_metrics(stats):
     return record
 
 
+def _reject_truncated_history(response, rows):
+    """Refuse a partial history rather than forecasting from an arbitrary slice.
+
+    PostgREST caps responses silently when db-max-rows is set, answering 206 with the
+    true total after the slash in Content-Range; nothing else in the response tells a
+    capped result apart from a complete one. Because the query is unordered, the rows
+    we would keep are arbitrary, so a cap introduced upstream -- or a proxy limit --
+    would quietly degrade every forecast rather than break anything visibly.
+
+    retrain() treats the raise as a failed refresh and carries on serving the
+    last-good forecasts, which is the honest outcome; /health surfaces it if the
+    condition persists long enough to matter.
+    """
+    content_range = response.headers.get("Content-Range")
+    if not content_range or "/" not in content_range:
+        # Not every proxy forwards it, and count=exact is a request, not a promise.
+        return
+    total = content_range.rsplit("/", 1)[1].strip()
+    if not total.isdigit():
+        return
+    if rows < int(total):
+        raise RuntimeError(
+            f"History truncated by the API: received {rows} of {total} rows. "
+            "A server-side row cap (PostgREST db-max-rows, or a proxy limit) makes "
+            "the forecast depend on an arbitrary subset of history."
+        )
+
+
 def _load_raw():
-    """Fetch the full raw history frame from PostgREST."""
-    response = requests.get(CPHAPI_HOST, timeout=FETCH_TIMEOUT)
+    """Fetch the slice of history the forecaster actually uses.
+
+    This used to request every row and every column on every refresh: 2.85 M rows and
+    roughly 240 MB an hour, of which three columns and the last ~14 months are read.
+    The remainder was transferred, JSON-parsed and discarded -- and at that size the
+    transfer is itself a liability. Filtering server-side takes it to ~940 k rows and
+    ~67 MB.
+    """
+    cutoff = (
+        pd.Timestamp.now("UTC").tz_localize(None) - pd.Timedelta(days=HISTORY_DAYS)
+    ).strftime("%Y-%m-%dT%H:%M:%S")
+    response = requests.get(
+        CPHAPI_HOST,
+        params={"select": ",".join(RAW_COLUMNS), "timestamp": f"gte.{cutoff}"},
+        # Makes PostgREST report the unpaginated total in Content-Range. Without it
+        # the header reads "/*" and a row cap would be undetectable.
+        headers={"Prefer": "count=exact"},
+        timeout=FETCH_TIMEOUT,
+    )
     response.raise_for_status()
-    return pd.DataFrame(response.json())
+    df = pd.DataFrame(response.json())
+    _reject_truncated_history(response, len(df))
+    logger.info(
+        "Fetched %d rows of history covering %d days (since %s)",
+        len(df), HISTORY_DAYS, cutoff,
+    )
+    return df
 
 
 def _run_forecast(df_raw):

@@ -149,3 +149,7 @@ Miniconda3-latest-MacOSX-x86_64.sh
 ml_api/project/chronos_bolt_base/learner.pkl
 autogluon/project/models
 ml_api/project/models
+
+# Local Claude Code state: per-machine permissions and a PID lock file.
+.claude/settings.local.json
+.claude/*.lock

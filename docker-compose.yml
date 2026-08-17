@@ -15,7 +15,17 @@ services:
     image: "ghcr.io/simonottosen/cph-security_nextjs:main"
     container_name: "cph_frontend_nextjs"
     restart: unless-stopped
-      
+    # Surfaces a wedged frontend as unhealthy rather than leaving the proxy to
+    # discover it. Deliberately NOT a `depends_on` gate for reverse-proxy: that
+    # proxy also fronts /api/, so blocking its start on frontend health would
+    # turn a frontend outage into an API outage.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/robots.txt"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
   reverse-proxy:
     image: "nginx:alpine"
     container_name: "reverse-proxy"
@@ -114,15 +124,6 @@ services:
     depends_on:
       - universal_fetchtime
     command: daemon --docker
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-
-  cph_frontend_nextgen:
-    image: "ghcr.io/simonottosen/cph-security_frontend-nextgen:main"
-    container_name: "cph_frontend_nextgen"
-    restart: unless-stopped
-    environment:
-      REACT_APP_API_HOST: ${API_URL}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 

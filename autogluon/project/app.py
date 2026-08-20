@@ -421,8 +421,28 @@ def _single_line_message(code, message):
     }]
 
 
-def _prepare_airport_context(df_raw, code):
-    """Prepare univariate context dataframe for Chronos-2 predict_df."""
+def _as_naive_utc(ts):
+    """Coerce a timestamp to the naive-UTC convention used throughout this module.
+
+    Every internal index is naive UTC, so an aware timestamp handed in from
+    outside (the backtest origins are tz-aware) would raise on subtraction
+    rather than compare wrongly. Converting is the difference between a caller
+    being able to pass whatever it holds and having to know our convention.
+    """
+    ts = pd.Timestamp(ts)
+    return ts.tz_convert("UTC").tz_localize(None) if ts.tz is not None else ts
+
+
+def _prepare_airport_context(df_raw, code, now=None):
+    """Prepare univariate context dataframe for Chronos-2 predict_df.
+
+    ``now`` is injectable so a backtest can evaluate at a historical origin. The
+    staleness gate below exists to stop production serving an already-elapsed
+    horizon; at a backtest origin *every* context is stale by construction, so
+    with a wall clock the gate rejects all of them -- which is exactly what
+    silently zeroed the Chronos arm of eval/backtest.py. Callers that omit it get
+    the wall clock, so serving behaviour is unchanged.
+    """
     df_code = df_raw[df_raw["airport"] == code].copy()
     stats = {
         "raw_rows": int(len(df_code)),
@@ -556,7 +576,8 @@ def _prepare_airport_context(df_raw, code):
     # Refuse to forecast from a context that has already gone cold: the horizon
     # is anchored to the context end, so most or all of it would lie in the past.
     # Reporting no forecast is honest; emitting an elapsed one is not.
-    context_age = pd.Timestamp.now("UTC").tz_localize(None) - df_code.index.max()
+    now = pd.Timestamp.now("UTC").tz_localize(None) if now is None else _as_naive_utc(now)
+    context_age = now - df_code.index.max()
     stats["context_age_minutes"] = int(context_age.total_seconds() // 60)
     if context_age > pd.Timedelta(minutes=MAX_CONTEXT_AGE_MINUTES):
         stats["status"] = "stale_history"

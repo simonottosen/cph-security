@@ -295,6 +295,36 @@ def test_stale_history_is_refused_rather_than_forecast_into_the_past():
     assert stats["context_age_minutes"] >= app.MAX_CONTEXT_AGE_MINUTES
 
 
+def test_staleness_gate_measures_against_an_injectable_now():
+    """The same history is stale for production yet current at a matching origin.
+
+    eval/backtest.py evaluates at historical origins, where every context is
+    "stale" against the wall clock. Judged that way the gate rejects all of them
+    -- which is how the backtest's Chronos arm silently scored nothing at all
+    while the harness still reported success. Both halves are asserted together,
+    because the fix is only correct if serving still refuses the cold context.
+    """
+    end = pd.Timestamp("2026-01-15 12:00", tz="UTC")
+    idx = pd.date_range(end - pd.Timedelta(days=20), end, freq="5min")
+    df_raw = pd.DataFrame({
+        "airport": "CPH",
+        "timestamp": idx.astype(str),
+        "queue": np.maximum(0.0, 6.0 + 3.0 * np.sin(np.arange(len(idx)) / 40.0)),
+    })
+
+    # Against the wall clock this history is long past, so serving must refuse it.
+    _, stats, _ = app._prepare_airport_context(df_raw, "CPH")
+    assert stats["status"] == "stale_history"
+
+    # At the matching origin the very same history is current. Aware and naive
+    # both work, so a caller need not know this module's internal convention.
+    for origin in (end, end.tz_localize(None)):
+        ctx, stats, _ = app._prepare_airport_context(df_raw, "CPH", now=origin)
+        assert ctx is not None, f"now={origin!r} still rejected: {stats['status']}"
+        assert stats["status"] == "ok"
+        assert stats["context_age_minutes"] == 0
+
+
 def _diurnal_raw(code="CPH", days=20, gap=None, freq=None):
     """A strongly diurnal series, optionally with a hole punched in it.
 

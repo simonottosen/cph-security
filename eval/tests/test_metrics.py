@@ -49,6 +49,58 @@ def test_summarize_reports_wql_for_probabilistic_rows():
     assert row["WQL"] >= 0.0
 
 
+def test_wql_uses_the_common_quantiles_so_models_stay_comparable():
+    """A 21-level model and a 3-level model must yield the same WQL quantity.
+
+    Chronos-2 publishes 21 levels, XGBoost 3. WQL averages the per-level losses,
+    so averaging over whatever each model happened to emit produces two different
+    statistics printed in one column -- and the model with the wider, easier tail
+    coverage looks better for no modelling reason. The headline WQL is therefore
+    pinned to COMMON_QUANTILES, with the wide average reported separately.
+    """
+    narrow = pd.Series({"mean": 9.0, "q10": 7.0, "q50": 9.0, "q90": 12.0})
+    wide = narrow.copy()
+    # Extra levels, deliberately near-perfect, to make a wide average look great.
+    for name in ("q1", "q5", "q95", "q99"):
+        wide[name] = 10.0
+
+    acc = backtest.Accumulator()
+    acc.add("narrow", "CPH", 1, y=10.0, row=narrow)
+    acc.add("wide", "CPH", 1, y=10.0, row=wide)
+    frame = acc.frame()
+
+    by_model = frame.set_index("model")
+    assert by_model.loc["narrow", "q_loss"] == by_model.loc["wide", "q_loss"], (
+        "WQL must ignore the extra levels the wide model published"
+    )
+    assert by_model.loc["wide", "q_loss_wide"] < by_model.loc["narrow", "q_loss_wide"]
+    assert by_model.loc["narrow", "n_quantiles"] == 3
+    assert by_model.loc["wide", "n_quantiles"] == 7
+
+
+def test_all_rollup_restricted_to_horizons_every_model_reached():
+    """Chronos stops at 8h; the baselines answer at 168h.
+
+    Rolling every model up over its own horizon set would credit the short-reach
+    model for skipping the hardest horizons, which reads as a large accuracy win.
+    """
+    acc = backtest.Accumulator()
+    # Both models are perfect at 1h. Only the baseline answers at 168h, badly.
+    acc.add("chronos2", "CPH", 1, y=10.0, row=pd.Series({"mean": 10.0}))
+    acc.add("seasonal_naive", "CPH", 1, y=10.0, row=pd.Series({"mean": 10.0}))
+    acc.add("seasonal_naive", "CPH", 168, y=10.0, row=pd.Series({"mean": 0.0}))
+
+    summary = backtest.summarize(acc.frame())
+    overall = summary[summary["horizon_h"] == "ALL"].set_index("model")
+
+    # Without the restriction the baseline's ALL MAE would be 5.0 (mean of 0 and
+    # 10) and Chronos would appear to win a comparison it never entered.
+    assert overall.loc["seasonal_naive", "MAE"] == 0.0
+    assert overall.loc["chronos2", "MAE"] == 0.0
+    assert overall.loc["seasonal_naive", "n"] == 1
+    assert overall.iloc[0]["all_horizons"] == "1"
+
+
 def test_lookup_actuals_respects_tolerance():
     idx = pd.date_range("2026-06-01", periods=5, freq="5min", tz="UTC")
     series = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0], index=idx, name="queue")

@@ -60,13 +60,6 @@
     <xhtml:link rel="alternate" hreflang="de" href="https://waitport.com/de/airports/lhr" />
   </url>
   <url>
-    <loc>https://waitport.com/airports/ams</loc>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://waitport.com/airports/ams" />
-    <xhtml:link rel="alternate" hreflang="en" href="https://waitport.com/en/airports/ams" />
-    <xhtml:link rel="alternate" hreflang="da" href="https://waitport.com/da/airports/ams" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://waitport.com/de/airports/ams" />
-  </url>
-  <url>
     <loc>https://waitport.com/airports/dub</loc>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://waitport.com/airports/dub" />
     <xhtml:link rel="alternate" hreflang="en" href="https://waitport.com/en/airports/dub" />

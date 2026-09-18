@@ -104,8 +104,6 @@ services:
       - "ofelia.job-exec.osl.command=osl-fetch"
       - "ofelia.job-exec.arn.schedule=@every 5m"
       - "ofelia.job-exec.arn.command=arn-fetch"
-      - "ofelia.job-exec.ams.schedule=@every 5m"
-      - "ofelia.job-exec.ams.command=ams-fetch"
       - "ofelia.job-exec.dub.schedule=@every 5m"
       - "ofelia.job-exec.dub.command=dub-fetch"
       - "ofelia.job-exec.lhr.schedule=@every 5m"

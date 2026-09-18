@@ -14,7 +14,6 @@ Waitport monitors real-time security queue wait times and provides ML-based pred
 | ARN | Stockholm Arlanda | Sweden |
 | OSL | Oslo | Norway |
 | DUS | Dusseldorf | Germany |
-| AMS | Amsterdam Schiphol | Netherlands |
 | DUB | Dublin | Ireland |
 | LHR | London Heathrow | United Kingdom |
 | MUC | Munich | Germany |
@@ -192,7 +191,7 @@ GET /predict?airport=CPH&timestamp=2026-03-14T08:00
 ```
 
 **Parameters:**
-- `airport` - Airport code (one of: AMS, ARN, CPH, DUB, DUS, FRA, IST, LHR, EDI, MUC)
+- `airport` - Airport code (one of: ARN, CPH, DUB, DUS, FRA, IST, LHR, EDI, MUC)
 - `timestamp` - Future datetime in UTC (format: `YYYY-MM-DDTHH:MM`)
 
 **Response:**

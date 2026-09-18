@@ -9,7 +9,6 @@ export type AirportCode =
   | 'fra'
   | 'muc'
   | 'lhr'
-  | 'ams'
   | 'dub'
   | 'ist';
 
@@ -29,7 +28,6 @@ export const airportNames: Record<AirportCode, string> = {
   fra: '🇩🇪 Frankfurt Airport',
   muc: '🇩🇪 Munich Airport',
   lhr: '🇬🇧 London Heathrow Airport',
-  ams: '🇳🇱 Amsterdam Airport',
   dub: '🇮🇪 Dublin Airport',
   ist: '🇹🇷 Istanbul Airport',
 };
@@ -43,7 +41,6 @@ export const airportNamesText: Record<AirportCode, string> = {
   fra: 'Frankfurt Airport',
   muc: 'Munich Airport',
   lhr: 'London Heathrow Airport',
-  ams: 'Amsterdam Airport',
   dub: 'Dublin Airport',
   ist: 'Istanbul Airport',
 };

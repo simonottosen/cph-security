@@ -12,7 +12,6 @@ setup(
                 "cph-fetch=app.app:copenhagen",
                 "arn-fetch=app.app:arlanda",
                 "osl-fetch=app.app:oslo",
-                "ams-fetch=app.app:amsterdam",
                 "lhr-fetch=app.app:heathrow",
                 "muc-fetch=app.app:munich",
                 "ist-fetch=app.app:istanbul",

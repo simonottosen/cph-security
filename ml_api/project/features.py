@@ -26,7 +26,6 @@ MINUTE_BUCKET = 5
 # Airport -> holidays factory (called with an explicit year range so the
 # resulting calendar is fully populated and membership tests are reliable).
 _HOLIDAY_FACTORIES = {
-    "AMS": holidays.Netherlands,
     "ARN": holidays.Sweden,
     "CPH": holidays.Denmark,
     "DUB": holidays.Ireland,

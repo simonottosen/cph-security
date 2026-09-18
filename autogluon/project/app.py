@@ -147,7 +147,7 @@ QUANTILE_LEVELS = [
     0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99,
 ]
 
-VALID_AIRPORTS = ["AMS", "ARN", "CPH", "DUB", "DUS", "FRA", "IST", "LHR", "EDI", "MUC"]
+VALID_AIRPORTS = ["ARN", "CPH", "DUB", "DUS", "FRA", "IST", "LHR", "EDI", "MUC"]
 
 # Known-future + historical covariates attached to every context/future frame.
 COVARIATE_COLUMNS = [

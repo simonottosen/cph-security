@@ -44,7 +44,7 @@ jobs:
         working-directory: ./autogluon
         run: |
           python -m pip install --upgrade pip
-          pip install "pandas>=0" "numpy>=0" "requests>=0" "flask>=0" "apscheduler>=0" "python-dotenv>=0" "pytest>=0"
+          pip install "pandas>=0" "numpy>=0" "requests>=0" "flask>=0" "apscheduler>=0" "python-dotenv>=0" "holidays>=0" "pytest>=0"
 
       - name: Run fast pytest suite
         working-directory: ./autogluon

@@ -21,6 +21,7 @@ import platform
 import tempfile
 import threading
 import time
+import typing
 
 import numpy as np
 import pandas as pd
@@ -149,12 +150,73 @@ QUANTILE_LEVELS = [
 
 VALID_AIRPORTS = ["ARN", "CPH", "DUB", "DUS", "FRA", "IST", "LHR", "EDI", "MUC"]
 
-# Known-future + historical covariates attached to every context/future frame.
-COVARIATE_COLUMNS = [
+# Calendar and queue-history covariates. Full by construction: they are pure
+# functions of the timestamp and of history we already hold, so a NaN in one of
+# these is a bug to surface, not a degradation to absorb.
+BASE_COVARIATE_COLUMNS = [
     "hour", "minute", "day_of_week", "is_weekend", "month",
     "tod_sin", "tod_cos", "tow_sin", "tow_cos", "doy_sin", "doy_cos",
     "queue_lag_30d", "queue_lag_365d", "queue_avg_dow_time", "queue_avg_time",
 ]
+
+# Airport -> (holidays-package calendar, tz for resolving the local date).
+# Ported from ml_api/project/features.py so both models read the same calendar.
+# The timezone matters most for is_holiday_eve: the eve signal lives in the
+# evening hours, which is exactly the window where the naive-UTC date and the
+# local date disagree, so dating off UTC would misplace the flag where it counts.
+_HOLIDAY_COUNTRIES = {
+    "ARN": ("Sweden", "Europe/Stockholm"),
+    "CPH": ("Denmark", "Europe/Copenhagen"),
+    "DUB": ("Ireland", "Europe/Dublin"),
+    "DUS": ("Germany", "Europe/Berlin"),
+    "FRA": ("Germany", "Europe/Berlin"),
+    "IST": ("Turkey", "Europe/Istanbul"),
+    "LHR": ("UnitedKingdom", "Europe/London"),
+    "EDI": ("UnitedKingdom", "Europe/London"),
+    "MUC": ("Germany", "Europe/Berlin"),
+}
+
+
+class _ExogSource(typing.NamedTuple):
+    """One exogenous covariate source.
+
+    ``load(code)`` resolves whatever the source needs (an import, a client, a
+    calendar) and returns an opaque payload, or None when the source cannot
+    serve this airport at all. ``values(index, payload)`` then maps timestamps
+    to numbers. The split exists so an unavailable *source* and a failing
+    *computation* are separately observable -- both degrade to NaN, but they are
+    different operational problems.
+
+    ``columns`` is declared rather than inferred: it is what lets
+    _add_exogenous_covariates create the columns before asking the source for
+    anything, so the frame's schema does not depend on the source succeeding.
+    """
+
+    name: str
+    columns: tuple
+    load: typing.Callable
+    values: typing.Callable
+
+
+EXOG_SOURCES = (
+    _ExogSource(
+        name="holidays",
+        columns=("is_holiday", "is_holiday_eve"),
+        # Bound late via lambda: the functions are defined further down, next to
+        # the other covariate builders, rather than hoisted above this constant.
+        load=lambda code: _load_holiday_calendar(code),
+        values=lambda index, payload: _holiday_values(index, payload),
+    ),
+)
+
+EXOG_COLUMNS = [c for source in EXOG_SOURCES for c in source.columns]
+
+# The declared superset: every covariate column a frame can carry. Static on
+# purpose -- a schema that varied with which sources happened to answer would
+# make metrics incomparable between refreshes. Columns no source could fill are
+# dropped just before predict (see _align_covariate_columns), and the drop is
+# recorded, so "absent" is always visible rather than inferred from a shape.
+COVARIATE_COLUMNS = BASE_COVARIATE_COLUMNS + EXOG_COLUMNS
 
 _chronos2_pipeline = None
 
@@ -228,6 +290,133 @@ def _add_time_covariates(df, timestamp_col="timestamp"):
     out["doy_sin"] = np.sin(2 * np.pi * day_of_year / 365.25)
     out["doy_cos"] = np.cos(2 * np.pi * day_of_year / 365.25)
     return out
+
+
+def _load_holiday_calendar(code):
+    """Resolve ``code``'s holiday calendar factory, or None if unavailable.
+
+    ``holidays`` is imported lazily (the idiom used for torch above) so a runtime
+    image without it degrades to NaN holiday covariates instead of failing to
+    start the service. An airport with no mapped country returns None for the
+    same reason.
+    """
+    country = _HOLIDAY_COUNTRIES.get(code)
+    if country is None:
+        return None
+    name, tz = country
+    try:
+        holidays = importlib.import_module("holidays")
+    except Exception as exc:  # pragma: no cover - depends on runtime image
+        logger.warning("Unable to import holidays: %s", exc)
+        return None
+    factory = getattr(holidays, name, None)
+    if factory is None:
+        logger.warning("holidays package has no calendar %r (airport %s)", name, code)
+        return None
+    return factory, tz
+
+
+def _holiday_values(index, payload):
+    """is_holiday / is_holiday_eve for a DatetimeIndex of naive-UTC timestamps.
+
+    Floats, not strings: Chronos-2 one-hot encodes string columns, so a string
+    flag would change the model's input width between refreshes depending on
+    which categories happened to appear in the window.
+    """
+    factory, tz = payload
+    local = pd.DatetimeIndex(index)
+    local = (local.tz_localize("UTC") if local.tz is None else local).tz_convert(tz)
+
+    if len(local) == 0:
+        empty = np.zeros(0, dtype=float)
+        return {"is_holiday": empty, "is_holiday_eve": empty}
+
+    # Explicit year range, as ml_api does: the calendar is then fully populated
+    # and membership tests don't depend on the package's lazy expansion. +1 year
+    # because the eve lookup reaches one day past the end of the window.
+    years = range(int(local.year.min()), int(local.year.max()) + 2)
+    calendar = factory(years=list(years))
+
+    dates = local.date
+    one_day = datetime.timedelta(days=1)
+    return {
+        "is_holiday": np.fromiter(
+            (1.0 if d in calendar else 0.0 for d in dates), dtype=float, count=len(dates)
+        ),
+        "is_holiday_eve": np.fromiter(
+            ((d + one_day) in calendar for d in dates), dtype=float, count=len(dates)
+        ),
+    }
+
+
+def _add_exogenous_covariates(df, code, exog=None, timestamp_col="timestamp"):
+    """Attach every EXOG_COLUMNS to ``df``, NaN wherever a source can't supply it.
+
+    This function must not raise. Each source is isolated in its own try/except,
+    because an exogenous input is by definition something outside our control:
+    an unreachable provider or a bad response should cost us that covariate, not
+    the whole forecast. NaN is the right encoding for "unknown" -- Chronos-2
+    attention-masks NaN past covariates and ignores NaN future ones -- whereas
+    zero-filling would assert something false (zero departures is a statement;
+    "no data" is not).
+
+    ``exog`` selects the active sources and defaults to EXOG_SOURCES. Passing an
+    empty sequence yields all-NaN exogenous columns, which is how the backtest
+    runs a control arm in the same process as a treatment arm; a module-level
+    toggle could not do that without the two arms racing.
+    """
+    out = df.copy()
+    # Unconditionally, and before consulting any source: the schema is a promise
+    # this function keeps on its own, not one contingent on the sources.
+    for col in EXOG_COLUMNS:
+        out[col] = np.nan
+
+    sources = EXOG_SOURCES if exog is None else tuple(exog)
+    if len(out) == 0 or not sources:
+        return out
+
+    index = pd.DatetimeIndex(pd.to_datetime(out[timestamp_col]))
+    for source in sources:
+        try:
+            payload = source.load(code)
+            if payload is None:
+                logger.debug("Exogenous source %r has nothing for %s", source.name, code)
+                continue
+            values = source.values(index, payload)
+            # Materialise every column before assigning any, so a source that
+            # fails halfway cannot leave a half-populated set behind -- which
+            # would read downstream as a genuine partial-coverage signal.
+            resolved = {}
+            for col in source.columns:
+                arr = np.asarray(values[col], dtype=float)
+                if arr.shape != (len(out),):
+                    raise ValueError(
+                        f"{source.name}.{col} returned {arr.shape}, expected ({len(out)},)"
+                    )
+                resolved[col] = arr
+            for col, arr in resolved.items():
+                out[col] = arr
+        except Exception as exc:  # noqa: BLE001 - a source may never break the forecast
+            logger.warning(
+                "Exogenous source %r failed for %s (%s); leaving %s as NaN",
+                source.name, code, exc, ", ".join(source.columns),
+            )
+    return out
+
+
+def _add_covariates(df, code, cov_tables, exog=None, timestamp_col="timestamp"):
+    """The single covariate builder.
+
+    Context and horizon frames both go through here -- that is what makes column
+    parity structural rather than a coincidence of two call sites calling the
+    same adders in the same order. Chronos-2 treats a column present in both
+    frames as known-future and one present only in the context as past-only, so
+    a column that silently appears in one frame and not the other changes what
+    the model is told without changing anything visible.
+    """
+    out = _add_time_covariates(df, timestamp_col=timestamp_col)
+    out = _add_history_queue_covariates(out, cov_tables, timestamp_col=timestamp_col)
+    return _add_exogenous_covariates(out, code, exog=exog, timestamp_col=timestamp_col)
 
 
 def _build_historical_covariate_tables(history_df):
@@ -433,7 +622,7 @@ def _as_naive_utc(ts):
     return ts.tz_convert("UTC").tz_localize(None) if ts.tz is not None else ts
 
 
-def _prepare_airport_context(df_raw, code, now=None):
+def _prepare_airport_context(df_raw, code, now=None, exog=None):
     """Prepare univariate context dataframe for Chronos-2 predict_df.
 
     ``now`` is injectable so a backtest can evaluate at a historical origin. The
@@ -442,6 +631,10 @@ def _prepare_airport_context(df_raw, code, now=None):
     with a wall clock the gate rejects all of them -- which is exactly what
     silently zeroed the Chronos arm of eval/backtest.py. Callers that omit it get
     the wall clock, so serving behaviour is unchanged.
+
+    ``exog`` selects the exogenous covariate sources (see
+    _add_exogenous_covariates); it is a parameter rather than module state so the
+    backtest can hold a control and a treatment arm open at the same time.
     """
     df_code = df_raw[df_raw["airport"] == code].copy()
     stats = {
@@ -600,12 +793,11 @@ def _prepare_airport_context(df_raw, code, now=None):
     df_code["item_id"] = code
     if getattr(df_code["timestamp"].dt, "tz", None) is not None:
         df_code["timestamp"] = df_code["timestamp"].dt.tz_localize(None)
-    df_code = _add_time_covariates(df_code, timestamp_col="timestamp")
-    df_code = _add_history_queue_covariates(df_code, cov_tables, timestamp_col="timestamp")
+    df_code = _add_covariates(df_code, code, cov_tables, exog=exog)
     return df_code, stats, cov_tables
 
 
-def _build_future_covariates(context_df, code, cov_tables):
+def _build_future_covariates(context_df, code, cov_tables, exog=None):
     """Build known future covariates for the forecast horizon."""
     offset = pd.tseries.frequencies.to_offset(RESAMPLE_FREQUENCY)
     last_ts = pd.to_datetime(context_df["timestamp"]).max()
@@ -618,9 +810,51 @@ def _build_future_covariates(context_df, code, cov_tables):
         "item_id": code,
         "timestamp": future_timestamps,
     })
-    future_df = _add_time_covariates(future_df, timestamp_col="timestamp")
-    future_df = _add_history_queue_covariates(future_df, cov_tables, timestamp_col="timestamp")
-    return future_df
+    return _add_covariates(future_df, code, cov_tables, exog=exog)
+
+
+def _align_covariate_columns(context_df, future_df):
+    """Drop exogenous covariates that cannot teach the model anything this refresh.
+
+    Chronos-2 is in-context: it infers the covariate->target relationship from the
+    context window at inference time. A column that is all-NaN across the whole
+    context is a dead channel -- masked in the past, and per the docs "not
+    utilized" in the future -- so carrying it only widens the input.
+
+    Populated for an item's context but missing for that same item's horizon means
+    a source outage mid-refresh. Dropping from BOTH frames makes that degrade to
+    "forecast without this covariate" rather than a horizon that loses it halfway
+    through, which is the case the model has no way to express. Items with no
+    context values at all are ignored, which is what lets partial airport coverage
+    survive while a real outage does not.
+
+    Only exogenous columns are considered. Calendar and queue covariates are full
+    by construction, so a NaN there is a bug to surface, not a degradation to
+    absorb -- silently dropping one would hide it.
+
+    Returns ``(context_df, future_df, dropped)``.
+    """
+    dropped = []
+    for col in EXOG_COLUMNS:
+        if col not in context_df.columns or col not in future_df.columns:
+            continue
+        ctx_covered = context_df.groupby("item_id")[col].apply(lambda s: bool(s.notna().any()))
+        covered_items = [item for item, ok in ctx_covered.items() if ok]
+        if not covered_items:
+            dropped.append(col)
+            continue
+        fut_covered = future_df.groupby("item_id")[col].apply(lambda s: bool(s.notna().any()))
+        if not all(bool(fut_covered.get(item, False)) for item in covered_items):
+            dropped.append(col)
+
+    if dropped:
+        logger.warning(
+            "Dropping covariate(s) with no usable coverage this refresh: %s",
+            ", ".join(dropped),
+        )
+        context_df = context_df.drop(columns=dropped)
+        future_df = future_df.drop(columns=dropped)
+    return context_df, future_df, dropped
 
 
 def _quantile_column_name(pred_df, quantile):
@@ -783,6 +1017,8 @@ def _run_forecast(df_raw):
 
     context_df = pd.concat(contexts, ignore_index=True)
     future_df = pd.concat(futures, ignore_index=True)
+    context_df, future_df, dropped_covariates = _align_covariate_columns(context_df, future_df)
+    used_covariates = [c for c in COVARIATE_COLUMNS if c not in dropped_covariates]
 
     pipeline = get_chronos2_pipeline()
     start = time.time()
@@ -822,7 +1058,10 @@ def _run_forecast(df_raw):
             "future_rows": int(fut_lengths.get(code, 0)),
             "prediction_length": PREDICTION_LENGTH,
             "quantile_levels": QUANTILE_LEVELS,
-            "covariate_columns": COVARIATE_COLUMNS,
+            # What the model was actually given, plus what it was denied. Recording
+            # only the declared superset would report a covariate we dropped.
+            "covariate_columns": used_covariates,
+            "covariates_dropped": dropped_covariates,
             "total_time_seconds": duration,  # shared across the batched call
             "last_trained": datetime.datetime.now().isoformat(),
         }

@@ -452,26 +452,45 @@ def arlanda():
 @_track("DUB")
 def dublin():
     # Define initial values
-    healthcheck = os.environ.get("DUB_HEALTHCHECK") 
+    healthcheck = os.environ.get("DUB_HEALTHCHECK")
     airport = "DUB"
-    airport_api = "https://www.dublinairport.com/upi/SecurityTimes/GetTimes"
-    
-    # Use requests module to send a GET request to the airport API and retrieve waiting time information as JSON
-    response = requests.get(airport_api)
-    waitingtime = json.loads(response.text)
-    t1_wait_time = None
-    for key, value in waitingtime.items():
-        if key == 'T1':
-            t1_wait_time = int(value.strip('= '))
+    # Replaces /upi/SecurityTimes/GetTimes, which 404s since the site moved to a
+    # Next.js front end backed by this API. Same {"T1": ..., "T2": ...} shape,
+    # now with bare numeric strings ("12") rather than the old decorated ones.
+    airport_api = "https://api.dublinairport.com/dap/get-security-times"
 
-    # If wf1_wait_time is not None, assign its value to a queue variable. Otherwise print an error message
-    if t1_wait_time is not None:
-        queue = t1_wait_time 
-        if queue < 0:
-            queue = 0
-    else:
-        print("Waiting time not found for Dublin Airport.")
-    
+    # Use requests module to send a GET request to the airport API and retrieve waiting time information as JSON
+    # raise_for_status so the next retirement surfaces as an HTTP error rather
+    # than a JSON decode failure on an HTML error page, and a timeout so a hung
+    # request cannot outlive the 5-minute schedule.
+    response = requests.get(airport_api, timeout=10)
+    response.raise_for_status()
+    waitingtime = response.json()
+
+    # Terminal 1 only, which is what this series has always been. The endpoint
+    # also carries T2, but switching to a T1/T2 average would redefine the
+    # target mid-series: every DUB row behind us is T1, and the forecaster
+    # trains on that history. Publishing the terminals separately is a schema
+    # change worth making deliberately, not a side effect of an endpoint swap.
+    raw = waitingtime.get("T1")
+
+    # Accept a bare integer, optionally prefixed by a comparator -- the old feed
+    # decorated its values ("= 12"), so this one may start doing so again.
+    # Anything else -- "Closed", "--", an empty string -- fails here on purpose:
+    # it means "no reading", and the one thing we must not do is turn it into a
+    # plausible number. The sign is part of the match rather than discarded,
+    # because a negative is the pipeline's "closed / no reading" sentinel and
+    # reading "-1" as 1 would be exactly such a plausible wrong number.
+    match = re.fullmatch(r"\s*[=<>]?\s*(-?\d+)\s*", str(raw)) if raw is not None else None
+    if match is None:
+        raise RuntimeError(
+            f"No usable Terminal 1 waiting time for Dublin Airport in {waitingtime!r}"
+        )
+
+    queue = int(match.group(1))
+    if queue < 0:
+        queue = 0
+
     process_airport_result(queue, airport, healthcheck)
 
 @_track("EDI")

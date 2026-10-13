@@ -20,7 +20,7 @@ sys.path.append(str(Path(__file__).resolve().parent))
 os.environ.setdefault("SUPABASE_URL", "https://unit-test.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "service-role-unit-test")
 
-from app import healthcheck_perform, database_write
+from app import healthcheck_perform, database_write, dublin
 
 
 class AppTests(unittest.TestCase):
@@ -116,6 +116,62 @@ class AppTests(unittest.TestCase):
         summary = captured.getvalue()
         self.assertIn("Airport CPH was completed", summary)
         self.assertIn("Queue is 5", summary)
-        
+
+    # ---------- dublin() ----------
+    def _dublin_response(self, payload):
+        """A requests-like stub returning ``payload`` from .json()."""
+        response = MagicMock()
+        response.json.return_value = payload
+        response.raise_for_status.return_value = None
+        return response
+
+    @patch("app.process_airport_result")
+    @patch("requests.get")
+    def test_dublin_reads_terminal_1(self, mock_get, mock_result):
+        """The live shape: bare numeric strings for both terminals, T1 wins.
+
+        T2 is deliberately the smaller number, so reading it -- or averaging the
+        two -- would show up here rather than as a quiet shift in the series.
+        """
+        mock_get.return_value = self._dublin_response({"T1": "12", "T2": "3"})
+
+        dublin()
+
+        queue, airport, _ = mock_result.call_args.args
+        self.assertEqual(queue, 12)
+        self.assertEqual(airport, "DUB")
+
+    @patch("app.process_airport_result")
+    @patch("requests.get")
+    def test_dublin_accepts_decorated_and_sentinel_values(self, mock_get, mock_result):
+        """Comparator prefixes parse; a negative sentinel still clamps to zero."""
+        for payload, expected in (
+            ({"T1": "= 12"}, 12),
+            ({"T1": "< 5"}, 5),
+            ({"T1": "-1"}, 0),
+        ):
+            with self.subTest(payload=payload):
+                mock_result.reset_mock()
+                mock_get.return_value = self._dublin_response(payload)
+                dublin()
+                self.assertEqual(mock_result.call_args.args[0], expected)
+
+    @patch("app.process_airport_result")
+    @patch("requests.get")
+    def test_dublin_refuses_to_invent_a_number(self, mock_get, mock_result):
+        """No reading must raise, never write.
+
+        Writing a guess here is worse than writing nothing: the forecaster has
+        gap machinery for a missing row and no way at all to recognise a
+        fabricated one.
+        """
+        for payload in ({"T1": "Closed"}, {"T1": "--"}, {"T1": ""}, {"T2": "3"}, {}):
+            with self.subTest(payload=payload):
+                mock_get.return_value = self._dublin_response(payload)
+                with self.assertRaises(RuntimeError):
+                    dublin()
+                mock_result.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
